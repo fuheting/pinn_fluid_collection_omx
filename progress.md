@@ -26,6 +26,7 @@ Explicitly not completed:
 | 2 | Darcy flow domain, residual formulation, training script, and validation tests | Residual foundation complete |
 | 3 | Stokes flow PINN formulation and tests | Residual foundation complete |
 | shared foundation | Collocation sampling and Stokes boundary-target mapping | Foundation complete |
+| shared foundation | Minimal Darcy and Stokes neural fields | Foundation complete |
 | 4 | Oseen equation formulation and convergence checks | Pending |
 | 5 | Laminar Navier-Stokes formulation and common channel-flow cases | Pending |
 | 6 | Documentation consolidation and cleanup across implemented models | Pending |
@@ -44,13 +45,12 @@ Completed in this pass:
 
 Remaining:
 
-- Add a minimal pressure network for `p_theta(x, y)`.
 - Add a lightweight training loop and convergence smoke test.
 - Add example output documentation once training exists.
 
 ## Continuation Notes
 
-The next model-training step should build on `pinn_fluid.domains.unit_square_flow_patches`, `pinn_fluid.domains.interior_collocation_points`, `pinn_fluid.domains.boundary_collocation_points`, `pinn_fluid.models.darcy`, and `pinn_fluid.models.stokes` rather than redefining the domain. Keep training tests small enough for local execution.
+The next model-training step should build on `pinn_fluid.domains.unit_square_flow_patches`, `pinn_fluid.domains.interior_collocation_points`, `pinn_fluid.domains.boundary_collocation_points`, `pinn_fluid.models.darcy.DarcyPressureField`, and `pinn_fluid.models.stokes.StokesVelocityPressureField` rather than redefining the domain or adding a second field abstraction. Keep training tests small enough for local execution.
 
 ## Phase 3: Stokes Flow
 
@@ -66,7 +66,7 @@ Completed in this pass:
 
 Remaining:
 
-- Add a minimal `(u, v, p)` neural field and training smoke test.
+- Add a training smoke test around the minimal `(u, v, p)` neural field.
 
 ## Shared Collocation Foundation
 
@@ -82,5 +82,20 @@ Completed in this pass:
 
 Remaining:
 
-- Add minimal neural fields around the Darcy pressure and Stokes `(u, v, p)` outputs.
 - Add lightweight training loops and convergence smoke tests.
+
+## Shared Neural Field Foundation
+
+Status: complete for the neural-field foundation pass.
+
+Completed in this pass:
+
+- Added a reusable `MLPField` for coordinate-to-field modules.
+- Added `DarcyPressureField` for scalar pressure predictions on `(x, y)`.
+- Added `StokesVelocityPressureField` for named `u`, `v`, and `pressure` predictions on `(x, y)`.
+- Added tests for output shapes, dtype preservation, invalid architecture settings, and named Stokes outputs.
+
+Remaining:
+
+- Add Darcy loss assembly and a lightweight training smoke test.
+- Add Stokes loss assembly and a lightweight training smoke test after the Darcy training path is stable.

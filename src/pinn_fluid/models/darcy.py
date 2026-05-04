@@ -4,12 +4,26 @@ from __future__ import annotations
 
 import torch
 
+from pinn_fluid.models.fields import MLPField
+
 DEFAULT_DARCY_LOSS_WEIGHTS: dict[str, float] = {
     "interior": 1.0,
     "inlet": 10.0,
     "outlet": 10.0,
     "wall": 1.0,
 }
+
+
+class DarcyPressureField(MLPField):
+    """Minimal neural pressure field `p_theta(x, y)` for Darcy flow."""
+
+    def __init__(self, *, hidden_width: int = 32, hidden_layers: int = 2) -> None:
+        super().__init__(
+            input_dim=2,
+            output_dim=1,
+            hidden_width=hidden_width,
+            hidden_layers=hidden_layers,
+        )
 
 
 def pressure_gradient(pressure: torch.Tensor, coordinates: torch.Tensor) -> torch.Tensor:
@@ -74,6 +88,7 @@ def boundary_residuals(
 
 
 __all__ = [
+    "DarcyPressureField",
     "DEFAULT_DARCY_LOSS_WEIGHTS",
     "boundary_residuals",
     "darcy_velocity",

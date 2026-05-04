@@ -6,6 +6,8 @@ from typing import Any
 
 import torch
 
+from pinn_fluid.models.fields import MLPField
+
 DEFAULT_STOKES_LOSS_WEIGHTS: dict[str, float] = {
     "continuity": 1.0,
     "x_momentum": 1.0,
@@ -14,6 +16,29 @@ DEFAULT_STOKES_LOSS_WEIGHTS: dict[str, float] = {
     "outlet": 10.0,
     "wall": 10.0,
 }
+
+
+class StokesVelocityPressureField(torch.nn.Module):
+    """Minimal neural field for Stokes velocity `(u, v)` and pressure `p`."""
+
+    def __init__(self, *, hidden_width: int = 32, hidden_layers: int = 2) -> None:
+        super().__init__()
+        self.field = MLPField(
+            input_dim=2,
+            output_dim=3,
+            hidden_width=hidden_width,
+            hidden_layers=hidden_layers,
+        )
+
+    def forward(self, coordinates: torch.Tensor) -> dict[str, torch.Tensor]:
+        """Return named Stokes field components at `coordinates`."""
+
+        values = self.field(coordinates)
+        return {
+            "u": values[:, 0:1],
+            "v": values[:, 1:2],
+            "pressure": values[:, 2:3],
+        }
 
 
 def _gradient(field: torch.Tensor, coordinates: torch.Tensor) -> torch.Tensor:
@@ -120,6 +145,7 @@ def stokes_boundary_targets(
 
 __all__ = [
     "DEFAULT_STOKES_LOSS_WEIGHTS",
+    "StokesVelocityPressureField",
     "no_slip_residual",
     "stokes_residuals",
     "stokes_boundary_targets",
