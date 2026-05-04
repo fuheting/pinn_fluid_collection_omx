@@ -8,14 +8,14 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-Phase 1 is complete for this scaffold pass. The repository now has structure, documentation, dependency declarations, inert source placeholders, a retained data directory, and import tests. It does not implement a fluid model, neural network, residual loss, solver, training loop, or numerical validation.
+Phase 2 has started with the shared flow-domain definition and a Darcy-flow residual instance. The repository now defines the unit-square domain, inlet/outlet/wall boundary patches, Darcy loss weights, autograd residual helpers, and tests for the analytic residual behavior. It does not yet include a trained PINN workflow.
 
 ## Planned Phases
 
 | Phase | Focus | Status |
 | --- | --- | --- |
 | 1 | Repository scaffold, documentation, PyTorch-oriented dependency direction, importable placeholders, import tests | Complete for scaffold pass |
-| 2 | First PINN model for Darcy flow | Pending |
+| 2 | Shared unit-square flow domain and first Darcy-flow residual instance | In progress |
 | 3 | Stokes flow at low Reynolds number | Pending |
 | 4 | Reduced-order Navier-Stokes through Oseen equations | Pending |
 | 5 | Laminar Navier-Stokes examples such as channel or Poiseuille flow | Pending |
@@ -40,7 +40,55 @@ Phase 1 is complete for this scaffold pass. The repository now has structure, do
 └── requirements.txt
 ```
 
-The `src/pinn_fluid` package is intentionally inert in Phase 1. Its modules exist so later phases have importable extension points, but they do not define model, solver, residual, PDE, or training APIs yet.
+The `src/pinn_fluid` package now contains the shared domain abstraction and the first Darcy-flow residual utilities. Training orchestration remains pending.
+
+## Shared Example Domain
+
+All flow models should start from the same unit-square example unless a later phase explicitly introduces a new benchmark:
+
+```text
+Omega = [0, 1] x [0, 1]
+```
+
+Boundary patches are model-agnostic dictionaries:
+
+```python
+boundary_patches = {
+    "inlet": {
+        "location": "top",
+        "x_range": [0.0, 0.25],
+        "type": "dirichlet",
+        "variable": "pressure",
+        "value": 1.0,
+    },
+    "outlet": {
+        "location": "bottom",
+        "x_range": [0.75, 1.0],
+        "type": "dirichlet",
+        "variable": "pressure",
+        "value": 0.0,
+    },
+    "walls": {
+        "type": "neumann",
+        "condition": "no_normal_flow",
+    },
+}
+```
+
+For Darcy flow with constant permeability `K = 1`, the governing equation reduces to:
+
+```text
+Delta p = 0
+```
+
+The Phase 2 implementation includes:
+
+- interior residual `p_xx + p_yy`
+- Darcy velocity `u = -grad(p)`
+- inlet residual `p - 1`
+- outlet residual `p`
+- wall residual `grad(p) dot n`
+- default loss weights: interior `1`, inlet `10`, outlet `10`, wall `1`
 
 ## Environment Direction
 
@@ -54,12 +102,12 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-Run the current scaffold tests:
+Run the current tests:
 
 ```bash
 python -m pytest
 ```
 
-## Continuing With Phase 2
+## Continuing Phase 2
 
-Before adding Darcy flow, update `progress.md` with the new phase start, add a focused plan for the governing equation and boundary conditions, and introduce tests that validate the intended residual or analytic reference behavior. Keep Phase 2 narrowly scoped so the first physical model can be reviewed and verified independently.
+Next, add sampling utilities for interior and boundary collocation points, then add a minimal pressure network and training loop around the existing Darcy residual API.

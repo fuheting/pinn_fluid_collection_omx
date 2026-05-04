@@ -1,3 +1,3 @@
-"""Placeholder namespace for future learnable components."""
+"""Model-specific residual utilities and learnable components."""
 
-__all__ = []
+__all__ = ["darcy"]
