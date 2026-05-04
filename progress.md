@@ -30,7 +30,7 @@ Explicitly not completed:
 | shared foundation | Darcy loss assembly and training smoke loop | Foundation complete |
 | shared foundation | Stokes loss assembly and training smoke loop | Foundation complete |
 | 4 | Oseen equation formulation and convergence checks | Training smoke foundation complete |
-| 5 | Laminar Navier-Stokes formulation and common channel-flow cases | Pending |
+| 5 | Laminar Navier-Stokes formulation and common channel-flow cases | Residual foundation complete |
 | 6 | Documentation consolidation and cleanup across implemented models | Pending |
 
 ## Phase 2: Darcy Flow
@@ -154,3 +154,22 @@ Completed in this pass:
 Remaining:
 
 - Add example output documentation once a fuller Oseen benchmark exists.
+
+## Phase 5: Navier-Stokes Flow
+
+Status: residual foundation complete.
+
+Completed in this pass:
+
+- Added Navier-Stokes residual helpers for steady incompressible laminar flow.
+- Added continuity, x-momentum, and y-momentum residuals for `(u, v, p)` fields with nonlinear self-advection.
+- Added Navier-Stokes loss weights matching the current Stokes/Oseen boundary and residual weighting shape.
+- Added tests for zero residuals under zero velocity and constant pressure.
+- Added tests showing Navier-Stokes residuals match Oseen residuals when the Oseen convection velocity is the current velocity.
+- Added tests for explicit nonlinear advection terms under a linear velocity field.
+
+Remaining:
+
+- Add Navier-Stokes boundary and loss assembly.
+- Add lightweight Navier-Stokes smoke-training checks.
+- Add example output documentation once a fuller Navier-Stokes benchmark exists.
