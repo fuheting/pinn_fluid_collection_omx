@@ -28,6 +28,7 @@ Explicitly not completed:
 | shared foundation | Collocation sampling and Stokes boundary-target mapping | Foundation complete |
 | shared foundation | Minimal Darcy and Stokes neural fields | Foundation complete |
 | shared foundation | Darcy loss assembly and training smoke loop | Foundation complete |
+| shared foundation | Stokes loss assembly and training smoke loop | Foundation complete |
 | 4 | Oseen equation formulation and convergence checks | Pending |
 | 5 | Laminar Navier-Stokes formulation and common channel-flow cases | Pending |
 | 6 | Documentation consolidation and cleanup across implemented models | Pending |
@@ -56,7 +57,7 @@ The next model-training step should build on `pinn_fluid.domains.unit_square_flo
 
 ## Phase 3: Stokes Flow
 
-Status: residual foundation complete.
+Status: training smoke foundation complete.
 
 Completed in this pass:
 
@@ -65,10 +66,12 @@ Completed in this pass:
 - Added a no-slip wall residual helper.
 - Added Stokes loss weights for continuity, momentum, inlet, outlet, and wall residuals.
 - Added tests for zero residuals under constant pressure and zero velocity, linear-field momentum behavior, and no-slip residual behavior.
+- Added weighted Stokes loss assembly from shared interior and boundary collocation samples.
+- Added a lightweight deterministic Stokes training smoke loop that verifies loss reduction.
 
 Remaining:
 
-- Add a training smoke test around the minimal `(u, v, p)` neural field.
+- Add fuller Stokes example output documentation after a validated benchmark exists.
 
 ## Shared Collocation Foundation
 
@@ -84,7 +87,7 @@ Completed in this pass:
 
 Remaining:
 
-- Add a Stokes training smoke test after the Darcy training path is stable.
+- Begin the Oseen residual foundation on the shared benchmark.
 
 ## Shared Neural Field Foundation
 
@@ -99,7 +102,7 @@ Completed in this pass:
 
 Remaining:
 
-- Add Stokes loss assembly and a lightweight training smoke test after the Darcy training path is stable.
+- Begin Phase 4 Oseen residual utilities after the Stokes smoke-training path is stable.
 
 ## Darcy Training Smoke Foundation
 
@@ -116,4 +119,20 @@ Completed in this pass:
 Remaining:
 
 - Add documented example outputs after a fuller Darcy benchmark exists.
-- Add Stokes loss assembly and a lightweight training smoke test.
+- Add fuller Stokes example output documentation after a validated benchmark exists.
+
+## Stokes Training Smoke Foundation
+
+Status: complete for the Stokes training smoke pass.
+
+Completed in this pass:
+
+- Added `StokesTrainingConfig` for tiny local training runs.
+- Added Stokes loss components for continuity, x-momentum, y-momentum, inlet, outlet, and wall residuals.
+- Added weighted total loss using the Phase 3 default Stokes loss weights.
+- Added a deterministic smoke-training loop around `StokesVelocityPressureField`.
+- Added tests for loss components, default weighting, and loss reduction over a short optimizer run.
+
+Remaining:
+
+- Begin Phase 4 with Oseen residual formulation and tests.
