@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-Phase 4 has started with an Oseen residual foundation on the same shared unit-square domain. The repository now defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, minimal Darcy and Stokes neural fields, and lightweight Darcy and Stokes training smoke loops.
+Phase 4 now includes an Oseen training smoke foundation on the same shared unit-square domain. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, minimal Darcy and Stokes neural fields, and lightweight Darcy, Stokes, and Oseen training smoke loops.
 
 ## Planned Phases
 
@@ -21,7 +21,7 @@ Phase 4 has started with an Oseen residual foundation on the same shared unit-sq
 | shared foundation | Minimal Darcy and Stokes neural fields | Foundation complete |
 | shared foundation | Darcy loss assembly and training smoke loop | Foundation complete |
 | shared foundation | Stokes loss assembly and training smoke loop | Foundation complete |
-| 4 | Reduced-order Navier-Stokes through Oseen equations | Residual foundation complete |
+| 4 | Reduced-order Navier-Stokes through Oseen equations | Training smoke foundation complete |
 | 5 | Laminar Navier-Stokes examples such as channel or Poiseuille flow | Pending |
 | 6 | Documentation, cleanup, and consolidated test coverage | Pending |
 
@@ -44,7 +44,7 @@ Phase 4 has started with an Oseen residual foundation on the same shared unit-sq
 └── requirements.txt
 ```
 
-The `src/pinn_fluid` package now contains the shared domain abstraction, Darcy-flow residual utilities, Stokes-flow residual utilities, Oseen residual utilities, minimal neural field modules, and smoke-training utilities for Darcy and Stokes flow.
+The `src/pinn_fluid` package now contains the shared domain abstraction, Darcy-flow residual utilities, Stokes-flow residual utilities, Oseen residual utilities, minimal neural field modules, and smoke-training utilities for Darcy, Stokes, and Oseen flow.
 
 ## Shared Example Domain
 
@@ -129,6 +129,14 @@ y_momentum = beta dot grad(v) - p_y + mu * (v_xx + v_yy)
 
 The Oseen residual helpers reduce to the Stokes residual helpers when `beta = 0`.
 
+The current Oseen training implementation includes:
+
+- velocity-pressure field reuse through `StokesVelocityPressureField`
+- continuity and momentum residual loss assembly with a prescribed convection velocity
+- inlet velocity, outlet pressure, and no-slip wall boundary losses from the shared patches
+- default loss weights: continuity `1`, x-momentum `1`, y-momentum `1`, inlet `10`, outlet `10`, wall `10`
+- weighted loss assembly and a small deterministic optimization smoke loop
+
 ## Collocation Sampling Foundation
 
 Shared sampling utilities now provide deterministic PyTorch tensors for the existing unit-square benchmark:
@@ -168,6 +176,16 @@ Stokes training utilities now connect the shared collocation samplers, velocity-
 
 The smoke loop checks training-path wiring and loss reduction on a tiny collocation set. It is not a validated Stokes benchmark or convergence study.
 
+## Oseen Training Smoke Foundation
+
+Oseen training utilities now connect the shared collocation samplers, velocity-pressure field, Oseen residual helpers, no-slip wall helper, and default loss weights:
+
+- `oseen_loss_components(...)` returns continuity, momentum, inlet, outlet, and wall mean-squared residual losses.
+- `oseen_total_loss(...)` applies the Phase 4 default weights.
+- `train_oseen_smoke(...)` runs a short local optimizer loop and returns loss history for regression tests.
+
+The smoke loop checks training-path wiring and loss reduction on a tiny collocation set. It is not a validated Oseen benchmark or convergence study.
+
 ## Environment Direction
 
 PyTorch is the intended machine-learning framework for future phases. Phase 1 tests only check package structure and import behavior; they do not require importing PyTorch.
@@ -188,4 +206,4 @@ python -m pytest
 
 ## Continuing The Model Phases
 
-Next, add Oseen boundary/loss assembly and convergence smoke checks around the shared benchmark.
+Next, add fuller example output documentation or proceed toward laminar Navier-Stokes cases once a validated benchmark is defined.

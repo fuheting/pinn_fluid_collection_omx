@@ -1,3 +1,3 @@
 """Experiment orchestration utilities."""
 
-__all__ = ["darcy", "stokes"]
+__all__ = ["darcy", "oseen", "stokes"]

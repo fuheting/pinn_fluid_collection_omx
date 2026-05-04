@@ -29,7 +29,7 @@ Explicitly not completed:
 | shared foundation | Minimal Darcy and Stokes neural fields | Foundation complete |
 | shared foundation | Darcy loss assembly and training smoke loop | Foundation complete |
 | shared foundation | Stokes loss assembly and training smoke loop | Foundation complete |
-| 4 | Oseen equation formulation and convergence checks | Residual foundation complete |
+| 4 | Oseen equation formulation and convergence checks | Training smoke foundation complete |
 | 5 | Laminar Navier-Stokes formulation and common channel-flow cases | Pending |
 | 6 | Documentation consolidation and cleanup across implemented models | Pending |
 
@@ -139,7 +139,7 @@ Remaining:
 
 ## Phase 4: Oseen Flow
 
-Status: residual foundation complete.
+Status: training smoke foundation complete.
 
 Completed in this pass:
 
@@ -148,9 +148,9 @@ Completed in this pass:
 - Added Oseen loss weights matching the current Stokes boundary and residual weighting shape.
 - Added tests showing zero-convection Oseen residuals reduce to Stokes residuals.
 - Added tests for explicit convection terms under a linear velocity field.
+- Added weighted Oseen loss assembly from shared interior and boundary collocation samples.
+- Added a lightweight deterministic Oseen training smoke loop that verifies loss reduction.
 
 Remaining:
 
-- Add Oseen boundary and loss assembly.
-- Add lightweight Oseen convergence smoke checks.
 - Add example output documentation once a fuller Oseen benchmark exists.
