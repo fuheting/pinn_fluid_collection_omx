@@ -23,15 +23,15 @@ Explicitly not completed:
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 2 | Darcy flow domain, residual formulation, training script, and validation tests | In progress |
-| 3 | Stokes flow PINN formulation and tests | Pending |
+| 2 | Darcy flow domain, residual formulation, training script, and validation tests | Residual foundation complete |
+| 3 | Stokes flow PINN formulation and tests | Residual foundation complete |
 | 4 | Oseen equation formulation and convergence checks | Pending |
 | 5 | Laminar Navier-Stokes formulation and common channel-flow cases | Pending |
 | 6 | Documentation consolidation and cleanup across implemented models | Pending |
 
 ## Phase 2: Darcy Flow
 
-Status: domain and residual foundation implemented.
+Status: domain and residual foundation complete.
 
 Completed in this pass:
 
@@ -50,4 +50,22 @@ Remaining:
 
 ## Continuation Notes
 
-The next Phase 2 step should build on `pinn_fluid.domains.unit_square_flow_patches` and `pinn_fluid.models.darcy` rather than redefining the domain. Keep training tests small enough for local execution.
+The next model-training step should build on `pinn_fluid.domains.unit_square_flow_patches`, `pinn_fluid.models.darcy`, and `pinn_fluid.models.stokes` rather than redefining the domain. Keep training tests small enough for local execution.
+
+## Phase 3: Stokes Flow
+
+Status: residual foundation complete.
+
+Completed in this pass:
+
+- Added Stokes-flow residual helpers for steady incompressible low-Reynolds-number flow.
+- Added continuity, x-momentum, and y-momentum residuals for `(u, v, p)` fields.
+- Added a no-slip wall residual helper.
+- Added Stokes loss weights for continuity, momentum, inlet, outlet, and wall residuals.
+- Added tests for zero residuals under constant pressure and zero velocity, linear-field momentum behavior, and no-slip residual behavior.
+
+Remaining:
+
+- Map the shared inlet/outlet patch abstraction to Stokes-specific velocity and pressure boundary targets.
+- Add collocation-point sampling shared by Darcy and Stokes.
+- Add a minimal `(u, v, p)` neural field and training smoke test.

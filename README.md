@@ -8,15 +8,15 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-Phase 2 has started with the shared flow-domain definition and a Darcy-flow residual instance. The repository now defines the unit-square domain, inlet/outlet/wall boundary patches, Darcy loss weights, autograd residual helpers, and tests for the analytic residual behavior. It does not yet include a trained PINN workflow.
+Phase 3 has started with a Stokes-flow residual foundation on the same shared unit-square domain. The repository now defines model-agnostic inlet/outlet/wall patches, Darcy residual helpers, Stokes residual helpers, and tests for analytic residual behavior. It does not yet include a trained PINN workflow.
 
 ## Planned Phases
 
 | Phase | Focus | Status |
 | --- | --- | --- |
 | 1 | Repository scaffold, documentation, PyTorch-oriented dependency direction, importable placeholders, import tests | Complete for scaffold pass |
-| 2 | Shared unit-square flow domain and first Darcy-flow residual instance | In progress |
-| 3 | Stokes flow at low Reynolds number | Pending |
+| 2 | Shared unit-square flow domain and first Darcy-flow residual instance | Residual foundation complete |
+| 3 | Stokes flow at low Reynolds number | Residual foundation complete |
 | 4 | Reduced-order Navier-Stokes through Oseen equations | Pending |
 | 5 | Laminar Navier-Stokes examples such as channel or Poiseuille flow | Pending |
 | 6 | Documentation, cleanup, and consolidated test coverage | Pending |
@@ -40,7 +40,7 @@ Phase 2 has started with the shared flow-domain definition and a Darcy-flow resi
 └── requirements.txt
 ```
 
-The `src/pinn_fluid` package now contains the shared domain abstraction and the first Darcy-flow residual utilities. Training orchestration remains pending.
+The `src/pinn_fluid` package now contains the shared domain abstraction, Darcy-flow residual utilities, and Stokes-flow residual utilities. Training orchestration remains pending.
 
 ## Shared Example Domain
 
@@ -90,6 +90,23 @@ The Phase 2 implementation includes:
 - wall residual `grad(p) dot n`
 - default loss weights: interior `1`, inlet `10`, outlet `10`, wall `1`
 
+## Stokes Residual Foundation
+
+For steady incompressible Stokes flow with velocity `(u, v)`, pressure `p`, and constant viscosity `mu`, Phase 3 defines:
+
+```text
+continuity = u_x + v_y
+x_momentum = -p_x + mu * (u_xx + u_yy)
+y_momentum = -p_y + mu * (v_xx + v_yy)
+```
+
+The current Stokes implementation includes:
+
+- continuity residual
+- x- and y-momentum residuals
+- no-slip wall residual helper
+- default loss weights: continuity `1`, x-momentum `1`, y-momentum `1`, inlet `10`, outlet `10`, wall `10`
+
 ## Environment Direction
 
 PyTorch is the intended machine-learning framework for future phases. Phase 1 tests only check package structure and import behavior; they do not require importing PyTorch.
@@ -108,6 +125,6 @@ Run the current tests:
 python -m pytest
 ```
 
-## Continuing Phase 2
+## Continuing The Model Phases
 
-Next, add sampling utilities for interior and boundary collocation points, then add a minimal pressure network and training loop around the existing Darcy residual API.
+Next, add sampling utilities for interior and boundary collocation points, then add minimal neural fields and training loops around the existing Darcy and Stokes residual APIs.
