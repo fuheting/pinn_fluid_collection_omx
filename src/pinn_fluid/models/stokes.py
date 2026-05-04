@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 
 DEFAULT_STOKES_LOSS_WEIGHTS: dict[str, float] = {
@@ -85,8 +87,40 @@ def no_slip_residual(wall_velocity: torch.Tensor) -> torch.Tensor:
     return wall_velocity
 
 
+def stokes_boundary_targets(
+    patches: dict[str, dict[str, Any]],
+    *,
+    inlet_velocity: tuple[float, float] = (0.0, -1.0),
+    wall_velocity: tuple[float, float] = (0.0, 0.0),
+) -> dict[str, dict[str, Any]]:
+    """Map shared flow patches to Stokes velocity and pressure targets."""
+
+    inlet = patches["inlet"]
+    outlet = patches["outlet"]
+    return {
+        "inlet": {
+            "location": inlet["location"],
+            "x_range": list(inlet["x_range"]),
+            "variable": "velocity",
+            "value": list(inlet_velocity),
+        },
+        "outlet": {
+            "location": outlet["location"],
+            "x_range": list(outlet["x_range"]),
+            "variable": "pressure",
+            "value": outlet["value"],
+        },
+        "walls": {
+            "variable": "velocity",
+            "condition": "no_slip",
+            "value": list(wall_velocity),
+        },
+    }
+
+
 __all__ = [
     "DEFAULT_STOKES_LOSS_WEIGHTS",
     "no_slip_residual",
     "stokes_residuals",
+    "stokes_boundary_targets",
 ]

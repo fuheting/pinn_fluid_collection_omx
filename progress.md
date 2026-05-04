@@ -25,6 +25,7 @@ Explicitly not completed:
 | --- | --- | --- |
 | 2 | Darcy flow domain, residual formulation, training script, and validation tests | Residual foundation complete |
 | 3 | Stokes flow PINN formulation and tests | Residual foundation complete |
+| shared foundation | Collocation sampling and Stokes boundary-target mapping | Foundation complete |
 | 4 | Oseen equation formulation and convergence checks | Pending |
 | 5 | Laminar Navier-Stokes formulation and common channel-flow cases | Pending |
 | 6 | Documentation consolidation and cleanup across implemented models | Pending |
@@ -43,14 +44,13 @@ Completed in this pass:
 
 Remaining:
 
-- Add collocation-point sampling for the interior and boundary patches.
 - Add a minimal pressure network for `p_theta(x, y)`.
 - Add a lightweight training loop and convergence smoke test.
 - Add example output documentation once training exists.
 
 ## Continuation Notes
 
-The next model-training step should build on `pinn_fluid.domains.unit_square_flow_patches`, `pinn_fluid.models.darcy`, and `pinn_fluid.models.stokes` rather than redefining the domain. Keep training tests small enough for local execution.
+The next model-training step should build on `pinn_fluid.domains.unit_square_flow_patches`, `pinn_fluid.domains.interior_collocation_points`, `pinn_fluid.domains.boundary_collocation_points`, `pinn_fluid.models.darcy`, and `pinn_fluid.models.stokes` rather than redefining the domain. Keep training tests small enough for local execution.
 
 ## Phase 3: Stokes Flow
 
@@ -66,6 +66,21 @@ Completed in this pass:
 
 Remaining:
 
-- Map the shared inlet/outlet patch abstraction to Stokes-specific velocity and pressure boundary targets.
-- Add collocation-point sampling shared by Darcy and Stokes.
 - Add a minimal `(u, v, p)` neural field and training smoke test.
+
+## Shared Collocation Foundation
+
+Status: complete for the sampling foundation pass.
+
+Completed in this pass:
+
+- Added deterministic interior collocation sampling for the shared unit-square domain.
+- Added deterministic inlet, outlet, and wall boundary sampling from the existing shared patch abstraction.
+- Added outward wall normals for Darcy no-normal-flow and Stokes no-slip boundary residual construction.
+- Added Stokes boundary targets derived from the shared inlet, outlet, and wall patch definitions without mutating the shared patch API.
+- Added tests for sample placement, wall normals, input validation, and Stokes target mapping.
+
+Remaining:
+
+- Add minimal neural fields around the Darcy pressure and Stokes `(u, v, p)` outputs.
+- Add lightweight training loops and convergence smoke tests.

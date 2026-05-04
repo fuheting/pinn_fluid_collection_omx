@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-Phase 3 has started with a Stokes-flow residual foundation on the same shared unit-square domain. The repository now defines model-agnostic inlet/outlet/wall patches, Darcy residual helpers, Stokes residual helpers, and tests for analytic residual behavior. It does not yet include a trained PINN workflow.
+Phase 3 has a Stokes-flow residual foundation on the same shared unit-square domain. The repository now defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, and tests for analytic residual and sampling behavior. It does not yet include a trained PINN workflow.
 
 ## Planned Phases
 
@@ -17,6 +17,7 @@ Phase 3 has started with a Stokes-flow residual foundation on the same shared un
 | 1 | Repository scaffold, documentation, PyTorch-oriented dependency direction, importable placeholders, import tests | Complete for scaffold pass |
 | 2 | Shared unit-square flow domain and first Darcy-flow residual instance | Residual foundation complete |
 | 3 | Stokes flow at low Reynolds number | Residual foundation complete |
+| shared foundation | Collocation sampling and Stokes boundary-target mapping | Foundation complete |
 | 4 | Reduced-order Navier-Stokes through Oseen equations | Pending |
 | 5 | Laminar Navier-Stokes examples such as channel or Poiseuille flow | Pending |
 | 6 | Documentation, cleanup, and consolidated test coverage | Pending |
@@ -89,6 +90,7 @@ The Phase 2 implementation includes:
 - outlet residual `p`
 - wall residual `grad(p) dot n`
 - default loss weights: interior `1`, inlet `10`, outlet `10`, wall `1`
+- deterministic interior and boundary collocation samples from the shared unit-square patches
 
 ## Stokes Residual Foundation
 
@@ -105,7 +107,17 @@ The current Stokes implementation includes:
 - continuity residual
 - x- and y-momentum residuals
 - no-slip wall residual helper
+- Stokes boundary targets derived from the shared inlet, outlet, and wall patches
 - default loss weights: continuity `1`, x-momentum `1`, y-momentum `1`, inlet `10`, outlet `10`, wall `10`
+
+## Collocation Sampling Foundation
+
+Shared sampling utilities now provide deterministic PyTorch tensors for the existing unit-square benchmark:
+
+- `interior_collocation_points(points_per_axis)` returns an evenly spaced interior grid that excludes the boundary.
+- `boundary_collocation_points(points_per_patch)` returns inlet and outlet coordinates plus wall coordinates and outward normals.
+
+The wall samples reuse the existing inlet/outlet patch geometry to leave the inlet and outlet openings available for model-specific boundary conditions.
 
 ## Environment Direction
 
@@ -127,4 +139,4 @@ python -m pytest
 
 ## Continuing The Model Phases
 
-Next, add sampling utilities for interior and boundary collocation points, then add minimal neural fields and training loops around the existing Darcy and Stokes residual APIs.
+Next, add minimal neural fields and training loops around the existing Darcy and Stokes residual APIs.
