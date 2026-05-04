@@ -1,3 +1,3 @@
-"""Placeholder namespace for future experiment orchestration."""
+"""Experiment orchestration utilities."""
 
-__all__ = []
+__all__ = ["darcy"]

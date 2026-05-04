@@ -10,7 +10,7 @@ def test_root_package_imports_without_framework_side_effects():
     package = importlib.import_module("pinn_fluid")
 
     assert package.PROJECT_NAME == "pinn-fluid"
-    assert package.PHASE == "neural-fields"
+    assert package.PHASE == "darcy-training-smoke"
     if not torch_loaded_before:
         assert "torch" not in sys.modules
 
@@ -22,6 +22,7 @@ def test_placeholder_namespaces_are_importable_and_inert():
         importlib.import_module("pinn_fluid.models.fields"),
         importlib.import_module("pinn_fluid.models.stokes"),
         importlib.import_module("pinn_fluid.solvers"),
+        importlib.import_module("pinn_fluid.solvers.darcy"),
         importlib.import_module("pinn_fluid.utils"),
     ]
 

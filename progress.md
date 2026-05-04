@@ -27,13 +27,14 @@ Explicitly not completed:
 | 3 | Stokes flow PINN formulation and tests | Residual foundation complete |
 | shared foundation | Collocation sampling and Stokes boundary-target mapping | Foundation complete |
 | shared foundation | Minimal Darcy and Stokes neural fields | Foundation complete |
+| shared foundation | Darcy loss assembly and training smoke loop | Foundation complete |
 | 4 | Oseen equation formulation and convergence checks | Pending |
 | 5 | Laminar Navier-Stokes formulation and common channel-flow cases | Pending |
 | 6 | Documentation consolidation and cleanup across implemented models | Pending |
 
 ## Phase 2: Darcy Flow
 
-Status: domain and residual foundation complete.
+Status: training smoke foundation complete.
 
 Completed in this pass:
 
@@ -42,15 +43,16 @@ Completed in this pass:
 - Added Darcy-flow loss weights for interior, inlet, outlet, and wall residuals.
 - Added PyTorch autograd helpers for pressure gradients, Laplace residuals, Darcy velocity, and boundary residuals.
 - Added tests for the patch definition, loss weights, harmonic pressure residual, velocity derivation, and boundary residual behavior.
+- Added weighted Darcy loss assembly from shared interior and boundary collocation samples.
+- Added a lightweight deterministic Darcy training smoke loop that verifies loss reduction.
 
 Remaining:
 
-- Add a lightweight training loop and convergence smoke test.
 - Add example output documentation once training exists.
 
 ## Continuation Notes
 
-The next model-training step should build on `pinn_fluid.domains.unit_square_flow_patches`, `pinn_fluid.domains.interior_collocation_points`, `pinn_fluid.domains.boundary_collocation_points`, `pinn_fluid.models.darcy.DarcyPressureField`, and `pinn_fluid.models.stokes.StokesVelocityPressureField` rather than redefining the domain or adding a second field abstraction. Keep training tests small enough for local execution.
+The next model-training step should build on `pinn_fluid.domains.unit_square_flow_patches`, `pinn_fluid.domains.interior_collocation_points`, `pinn_fluid.domains.boundary_collocation_points`, `pinn_fluid.models.darcy.DarcyPressureField`, `pinn_fluid.models.stokes.StokesVelocityPressureField`, and the solver pattern in `pinn_fluid.solvers.darcy` rather than redefining the domain or adding a second field abstraction. Keep training tests small enough for local execution.
 
 ## Phase 3: Stokes Flow
 
@@ -82,7 +84,7 @@ Completed in this pass:
 
 Remaining:
 
-- Add lightweight training loops and convergence smoke tests.
+- Add a Stokes training smoke test after the Darcy training path is stable.
 
 ## Shared Neural Field Foundation
 
@@ -97,5 +99,21 @@ Completed in this pass:
 
 Remaining:
 
-- Add Darcy loss assembly and a lightweight training smoke test.
 - Add Stokes loss assembly and a lightweight training smoke test after the Darcy training path is stable.
+
+## Darcy Training Smoke Foundation
+
+Status: complete for the Darcy training smoke pass.
+
+Completed in this pass:
+
+- Added `DarcyTrainingConfig` for tiny local training runs.
+- Added Darcy loss components for interior, inlet, outlet, and wall residuals.
+- Added weighted total loss using the Phase 2 default Darcy loss weights.
+- Added a deterministic smoke-training loop around `DarcyPressureField`.
+- Added tests for loss components, default weighting, and loss reduction over a short optimizer run.
+
+Remaining:
+
+- Add documented example outputs after a fuller Darcy benchmark exists.
+- Add Stokes loss assembly and a lightweight training smoke test.

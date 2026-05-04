@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-Phase 3 has a Stokes-flow residual foundation on the same shared unit-square domain. The repository now defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, minimal Darcy and Stokes neural fields, and tests for analytic residual, sampling, and field-shape behavior. It does not yet include a trained PINN workflow.
+Phase 3 has a Stokes-flow residual foundation on the same shared unit-square domain. The repository now defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, minimal Darcy and Stokes neural fields, and a lightweight Darcy training smoke loop. Stokes training remains pending.
 
 ## Planned Phases
 
@@ -19,6 +19,7 @@ Phase 3 has a Stokes-flow residual foundation on the same shared unit-square dom
 | 3 | Stokes flow at low Reynolds number | Residual foundation complete |
 | shared foundation | Collocation sampling and Stokes boundary-target mapping | Foundation complete |
 | shared foundation | Minimal Darcy and Stokes neural fields | Foundation complete |
+| shared foundation | Darcy loss assembly and training smoke loop | Foundation complete |
 | 4 | Reduced-order Navier-Stokes through Oseen equations | Pending |
 | 5 | Laminar Navier-Stokes examples such as channel or Poiseuille flow | Pending |
 | 6 | Documentation, cleanup, and consolidated test coverage | Pending |
@@ -42,7 +43,7 @@ Phase 3 has a Stokes-flow residual foundation on the same shared unit-square dom
 └── requirements.txt
 ```
 
-The `src/pinn_fluid` package now contains the shared domain abstraction, Darcy-flow residual utilities, Stokes-flow residual utilities, and minimal neural field modules. Training orchestration remains pending.
+The `src/pinn_fluid` package now contains the shared domain abstraction, Darcy-flow residual utilities, Stokes-flow residual utilities, minimal neural field modules, and Darcy smoke-training utilities. Stokes training orchestration remains pending.
 
 ## Shared Example Domain
 
@@ -93,6 +94,7 @@ The Phase 2 implementation includes:
 - wall residual `grad(p) dot n`
 - default loss weights: interior `1`, inlet `10`, outlet `10`, wall `1`
 - deterministic interior and boundary collocation samples from the shared unit-square patches
+- weighted loss assembly and a small deterministic optimization smoke loop
 
 ## Stokes Residual Foundation
 
@@ -132,6 +134,16 @@ Minimal PyTorch neural fields now provide the learnable surfaces that later trai
 
 These modules intentionally do not assemble losses, run optimizers, or claim convergence behavior.
 
+## Darcy Training Smoke Foundation
+
+Darcy training utilities now connect the shared collocation samplers, pressure field, residual helpers, and default loss weights:
+
+- `darcy_loss_components(...)` returns interior, inlet, outlet, and wall mean-squared residual losses.
+- `darcy_total_loss(...)` applies the Phase 2 default weights.
+- `train_darcy_smoke(...)` runs a short local optimizer loop and returns loss history for regression tests.
+
+The smoke loop only checks that the training path is wired and can reduce its own residual loss on a tiny collocation set. It is not a convergence study or a validated numerical benchmark.
+
 ## Environment Direction
 
 PyTorch is the intended machine-learning framework for future phases. Phase 1 tests only check package structure and import behavior; they do not require importing PyTorch.
@@ -152,4 +164,4 @@ python -m pytest
 
 ## Continuing The Model Phases
 
-Next, add lightweight training loops around the existing Darcy and Stokes residual APIs.
+Next, add the Stokes training smoke loop around the existing Stokes residual APIs.

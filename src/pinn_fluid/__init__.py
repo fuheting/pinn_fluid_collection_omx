@@ -1,6 +1,6 @@
 """Research package for phased PINN fluid mechanics examples."""
 
 PROJECT_NAME = "pinn-fluid"
-PHASE = "neural-fields"
+PHASE = "darcy-training-smoke"
 
 __all__ = ["PROJECT_NAME", "PHASE"]
