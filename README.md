@@ -25,6 +25,9 @@ The current phase adds an analytic Poiseuille-style Navier-Stokes benchmark on t
 | 5 | Laminar Navier-Stokes examples such as channel or Poiseuille flow | Training smoke foundation complete |
 | 6 | Documentation, cleanup, and consolidated test coverage | Smoke benchmark summary complete |
 | 7 | Analytic Poiseuille Navier-Stokes benchmark | Residual validation complete |
+| 8 | Experiment data schema and component-history recording | Planned |
+| 9 | CFD-backed Darcy and Poiseuille/Navier-Stokes vertical slice | Planned |
+| 10 | Stokes/Oseen experiment extension and consolidated report | Planned |
 
 ## Repository Layout
 
@@ -253,4 +256,6 @@ python -m pytest
 
 ## Continuing The Model Phases
 
-Next, compare a trained Navier-Stokes field against the analytic Poiseuille reference on a lightweight documented example.
+Next, build the CFD-backed experiment pipeline described in `progress.md`. The first implementation phase should add experiment data/history infrastructure, then a vertical slice for Darcy and Poiseuille/Navier-Stokes with lightweight deterministic reference data, residual fields, convergence histories, and local plot/artifact generation.
+
+New agents should start with this `README.md` and `progress.md`. Continue the established style: tests first, narrow implementation, docs/progress update, fresh verification, Lore commit, then push `origin main` with the temp gitdir/worktree command when needed.

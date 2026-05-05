@@ -33,6 +33,9 @@ Explicitly not completed:
 | 5 | Laminar Navier-Stokes formulation and common channel-flow cases | Training smoke foundation complete |
 | 6 | Documentation consolidation and cleanup across implemented models | Smoke benchmark summary complete |
 | 7 | Analytic Poiseuille Navier-Stokes benchmark | Residual validation complete |
+| 8 | Experiment data schema and component-history recording | Planned |
+| 9 | CFD-backed Darcy and Poiseuille/Navier-Stokes vertical slice | Planned |
+| 10 | Stokes/Oseen experiment extension and consolidated report | Planned |
 
 ## Phase 2: Darcy Flow
 
@@ -205,3 +208,36 @@ Completed in this pass:
 Remaining:
 
 - Compare a trained Navier-Stokes field against this analytic reference in a lightweight documented example.
+
+## Handoff For Experiment Phases
+
+Status: planned and ready for the next agent.
+
+Current research objective:
+
+- Demonstrate how PINN effectiveness changes as the enforced physics grows more complex from Darcy to Stokes, Oseen, and Navier-Stokes.
+- Produce predicted PINN fields, true/reference fields from lightweight in-repo CFD-style solvers, residual fields, total objective histories, per-component loss histories, and summary metrics.
+
+Deep-interview decisions to preserve:
+
+- Use CFD-backed references, but keep the first pass lightweight, deterministic, and in-repo.
+- Build a vertical slice first for Darcy and Poiseuille/Navier-Stokes rather than all models at once.
+- Save reproducible numeric artifacts plus plots.
+- Use simple deterministic grids and lightweight local runs.
+- Let the implementing agent choose grid sizes, training steps, file formats, and plot layouts when documented and lightweight.
+- Treat first-pass success as decreasing histories plus finite reported metrics, not strict accuracy thresholds or final claims about physics-complexity ranking.
+
+Next phase order:
+
+1. Phase 8: experiment result schema and component-wise training history capture.
+2. Phase 9: Darcy and Poiseuille/Navier-Stokes CFD-backed vertical-slice experiments.
+3. Phase 10: Stokes/Oseen extension and consolidated cross-model report.
+
+Required workflow for future phases:
+
+- Read `README.md` and this file.
+- Inspect current model, solver, benchmark, and test patterns before editing.
+- Write failing tests first, then implement narrowly.
+- Update docs and progress in the same phase.
+- Verify with targeted tests, `python -m pytest`, `git diff --check`, and diagnostics or `py_compile` where useful.
+- Commit with the Lore protocol and push `origin main`.
