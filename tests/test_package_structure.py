@@ -10,7 +10,7 @@ def test_root_package_imports_without_framework_side_effects():
     package = importlib.import_module("pinn_fluid")
 
     assert package.PROJECT_NAME == "pinn-fluid"
-    assert package.PHASE == "poiseuille-analytic-benchmark"
+    assert package.PHASE == "cfd-backed-experiment-slice"
     if not torch_loaded_before:
         assert "torch" not in sys.modules
 
@@ -18,6 +18,7 @@ def test_root_package_imports_without_framework_side_effects():
 def test_placeholder_namespaces_are_importable_and_inert():
     modules = [
         importlib.import_module("pinn_fluid.benchmarks"),
+        importlib.import_module("pinn_fluid.experiments"),
         importlib.import_module("pinn_fluid.models"),
         importlib.import_module("pinn_fluid.models.darcy"),
         importlib.import_module("pinn_fluid.models.fields"),

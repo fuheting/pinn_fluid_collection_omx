@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-The current phase adds an analytic Poiseuille-style Navier-Stokes benchmark on the same shared unit-square domain. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered loss summaries for those smoke loops, and a closed-form laminar channel reference that has zero steady Navier-Stokes residual under the existing autograd helpers.
+The current phase adds deterministic experiment orchestration for comparing PINN predictions against lightweight in-repo reference fields. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, and a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, and summary metrics.
 
 ## Planned Phases
 
@@ -25,9 +25,9 @@ The current phase adds an analytic Poiseuille-style Navier-Stokes benchmark on t
 | 5 | Laminar Navier-Stokes examples such as channel or Poiseuille flow | Training smoke foundation complete |
 | 6 | Documentation, cleanup, and consolidated test coverage | Smoke benchmark summary complete |
 | 7 | Analytic Poiseuille Navier-Stokes benchmark | Residual validation complete |
-| 8 | Experiment data schema and component-history recording | Planned |
-| 9 | CFD-backed Darcy and Poiseuille/Navier-Stokes vertical slice | Planned |
-| 10 | Stokes/Oseen experiment extension and consolidated report | Planned |
+| 8 | Experiment data schema and component-history recording | Complete |
+| 9 | CFD-backed Darcy and Poiseuille/Navier-Stokes vertical slice | Complete |
+| 10 | Stokes/Oseen experiment extension and consolidated report | Complete |
 
 ## Repository Layout
 
@@ -48,7 +48,7 @@ The current phase adds an analytic Poiseuille-style Navier-Stokes benchmark on t
 └── requirements.txt
 ```
 
-The `src/pinn_fluid` package now contains the shared domain abstraction, Darcy-flow residual utilities, Stokes-flow residual utilities, Oseen residual utilities, Navier-Stokes residual utilities, minimal neural field modules, smoke-training utilities for Darcy, Stokes, Oseen, and Navier-Stokes flow, and a consolidated smoke benchmark summary module.
+The `src/pinn_fluid` package now contains the shared domain abstraction, Darcy-flow residual utilities, Stokes-flow residual utilities, Oseen residual utilities, Navier-Stokes residual utilities, minimal neural field modules, smoke-training utilities for Darcy, Stokes, Oseen, and Navier-Stokes flow, a consolidated smoke benchmark summary module, and deterministic experiment orchestration in `pinn_fluid.experiments`.
 
 ## Shared Example Domain
 
@@ -236,6 +236,26 @@ p(x, y) = p0 - 8 mu U x
 
 This is an analytic residual benchmark, not a trained PINN comparison against the analytic solution.
 
+## CFD-Backed Experiment Layer
+
+Phases 8-10 add `pinn_fluid.experiments` for lightweight local comparisons as physics complexity increases:
+
+- `TrainingHistory` records total objective values and per-loss-component histories for every optimizer iteration.
+- `ExperimentResult` stores model name, reference source, grid shape, metrics, and artifact paths.
+- `run_darcy_experiment(...)` trains a small Darcy pressure field and compares it to an in-repo finite-difference Laplace reference on a deterministic grid.
+- `run_poiseuille_navier_stokes_experiment(...)` trains a small velocity-pressure field against a horizontal Poiseuille channel reference while enforcing Navier-Stokes residual components.
+- `run_stokes_experiment(...)` and `run_oseen_experiment(...)` reuse the same channel reference to extend the comparison to lower-complexity velocity-pressure physics.
+- `run_all_experiments(...)` runs Darcy, Stokes, Oseen, and Navier-Stokes in order and writes a consolidated JSON and Markdown report.
+
+Each experiment writes reproducible numeric artifacts under the configured output directory:
+
+- `fields.npz` with grid coordinates, PINN-predicted fields, reference fields, and residual fields
+- `history.json` with total and component-wise objective histories
+- `metrics.json` with finite L2/RMS comparison metrics
+- loss-history and field plot artifacts
+
+The first-pass success criterion is intentionally modest: histories should decrease over the tiny deterministic run and reported metrics should be finite. These runs are reproducible local experiment slices, not final accuracy claims.
+
 ## Environment Direction
 
 PyTorch is the intended machine-learning framework for future phases. Phase 1 tests only check package structure and import behavior; they do not require importing PyTorch.
@@ -256,6 +276,6 @@ python -m pytest
 
 ## Continuing The Model Phases
 
-Next, build the CFD-backed experiment pipeline described in `progress.md`. The first implementation phase should add experiment data/history infrastructure, then a vertical slice for Darcy and Poiseuille/Navier-Stokes with lightweight deterministic reference data, residual fields, convergence histories, and local plot/artifact generation.
+The remaining research work is to run broader, longer experiments with selected grid sizes and training budgets, then analyze how the reported metrics change with the enforced physics model. Keep those studies separate from the lightweight regression-oriented defaults in `pinn_fluid.experiments`.
 
 New agents should start with this `README.md` and `progress.md`. Continue the established style: tests first, narrow implementation, docs/progress update, fresh verification, Lore commit, then push `origin main` with the temp gitdir/worktree command when needed.

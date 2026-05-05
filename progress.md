@@ -33,9 +33,9 @@ Explicitly not completed:
 | 5 | Laminar Navier-Stokes formulation and common channel-flow cases | Training smoke foundation complete |
 | 6 | Documentation consolidation and cleanup across implemented models | Smoke benchmark summary complete |
 | 7 | Analytic Poiseuille Navier-Stokes benchmark | Residual validation complete |
-| 8 | Experiment data schema and component-history recording | Planned |
-| 9 | CFD-backed Darcy and Poiseuille/Navier-Stokes vertical slice | Planned |
-| 10 | Stokes/Oseen experiment extension and consolidated report | Planned |
+| 8 | Experiment data schema and component-history recording | Complete |
+| 9 | CFD-backed Darcy and Poiseuille/Navier-Stokes vertical slice | Complete |
+| 10 | Stokes/Oseen experiment extension and consolidated report | Complete |
 
 ## Phase 2: Darcy Flow
 
@@ -209,9 +209,54 @@ Remaining:
 
 - Compare a trained Navier-Stokes field against this analytic reference in a lightweight documented example.
 
-## Handoff For Experiment Phases
+## Phase 8: Experiment Schema And Component Histories
 
-Status: planned and ready for the next agent.
+Status: complete for the first experiment-data pass.
+
+Completed in this pass:
+
+- Added `TrainingHistory` for total objective values and component-wise histories by optimizer iteration.
+- Added `ExperimentResult` for model metadata, reference metadata, grid shape, metrics, and artifact paths.
+- Added JSON serialization helpers for reproducible history and summary output.
+- Added tests for history length validation, stable component ordering, and result serialization.
+
+Remaining:
+
+- Keep the schema small until broader research runs show a concrete need for richer metadata.
+
+## Phase 9: Darcy And Poiseuille/Navier-Stokes Vertical Slice
+
+Status: complete for the lightweight deterministic vertical slice.
+
+Completed in this pass:
+
+- Added a deterministic in-repo finite-difference Laplace reference for the shared Darcy pressure setup.
+- Added Darcy experiment orchestration that saves predicted pressure, reference pressure, predicted/reference velocities, residual fields, objective history, component histories, plots, and finite metrics.
+- Added Poiseuille/Navier-Stokes experiment orchestration that trains a small velocity-pressure field against the channel reference while recording continuity, x-momentum, y-momentum, and boundary objectives.
+- Added tests that assert decreasing histories, finite metrics, and saved numeric/plot artifacts for both vertical-slice models.
+
+Remaining:
+
+- Run longer local studies outside the regression defaults before making accuracy or physics-ranking claims.
+
+## Phase 10: Stokes/Oseen Extension And Consolidated Report
+
+Status: complete for the first consolidated experiment pass.
+
+Completed in this pass:
+
+- Added Stokes and Oseen experiment runs against the same Poiseuille channel reference used by the Navier-Stokes vertical slice.
+- Added `run_all_experiments(...)` to run Darcy, Stokes, Oseen, and Navier-Stokes in phase order.
+- Added consolidated JSON and Markdown cross-model reports with objective and field/residual metrics.
+- Added tests for ordered cross-model execution, decreasing histories, finite metrics, and report artifacts.
+
+Remaining:
+
+- Increase grid sizes, training budgets, and reporting detail in future research runs once the lightweight pipeline is stable.
+
+## Handoff For Follow-Up Experiment Studies
+
+Status: lightweight experiment pipeline complete and ready for broader local studies.
 
 Current research objective:
 
@@ -227,7 +272,7 @@ Deep-interview decisions to preserve:
 - Let the implementing agent choose grid sizes, training steps, file formats, and plot layouts when documented and lightweight.
 - Treat first-pass success as decreasing histories plus finite reported metrics, not strict accuracy thresholds or final claims about physics-complexity ranking.
 
-Next phase order:
+Completed phase order:
 
 1. Phase 8: experiment result schema and component-wise training history capture.
 2. Phase 9: Darcy and Poiseuille/Navier-Stokes CFD-backed vertical-slice experiments.
