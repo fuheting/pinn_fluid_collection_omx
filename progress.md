@@ -36,6 +36,7 @@ Explicitly not completed:
 | 8 | Experiment data schema and component-history recording | Complete |
 | 9 | CFD-backed Darcy and Poiseuille/Navier-Stokes vertical slice | Complete |
 | 10 | Stokes/Oseen experiment extension and consolidated report | Complete |
+| 11 | Result-procurement runner and manifest | Complete |
 
 ## Phase 2: Darcy Flow
 
@@ -277,6 +278,53 @@ Completed phase order:
 1. Phase 8: experiment result schema and component-wise training history capture.
 2. Phase 9: Darcy and Poiseuille/Navier-Stokes CFD-backed vertical-slice experiments.
 3. Phase 10: Stokes/Oseen extension and consolidated cross-model report.
+4. Phase 11: result-procurement runner and manifest for staged local runs.
+
+## Phase 11: Result-Procurement Runner
+
+Status: complete.
+
+Completed in this pass:
+
+- Added `pinn_fluid.result_procurement.run_result_procurement(...)` as a narrow wrapper around `run_all_experiments(...)`.
+- Added `python -m pinn_fluid.result_procurement` for configured local sanity and paper-demo tiers.
+- Wrote `run_manifest.json` under the configured output directory with git commit, config values, per-model output directories, artifact paths, metrics, finite-metric flags, and history-reduction flags.
+- Added tests that first failed on the missing runner module, then verified configured output directories, manifest creation, finite metrics, decreasing histories, and artifact references on tiny deterministic settings.
+
+Remaining:
+
+- Phase 12 should add standalone figure-generation utilities from saved artifacts rather than expanding the runner.
+- Phase 13 should use the runner for sanity and paper-demo tiers without committing generated data artifacts.
+
+## Next Result-Procurement Phases
+
+Do not ask the next agent to complete the entire result study in one uninterrupted run. Preserve the phased style and make each phase testable.
+
+Recommended next phases:
+
+1. Phase 12: Add figure-generation utilities for saved experiment artifacts with tests against small synthetic `fields.npz` and `history.json` inputs.
+2. Phase 13: Run the sanity tier and laptop-moderate paper-demo tier locally, record the manifest, and summarize generated artifact paths without committing bulky outputs.
+3. Phase 14: Update documentation with result-procurement commands, figure inventory, and known limitations from the actual run.
+
+Suggested initial run tiers:
+
+- Sanity tier: `grid_points=9`, `training_steps=80`, `hidden_width=12`, `hidden_layers=1`, `learning_rate=0.02`.
+- Paper-demo tier: `grid_points=31`, `training_steps=800`, `hidden_width=24`, `hidden_layers=2`, `learning_rate=0.01`, `seed=0`, `viscosity=0.25`, `peak_velocity=1.0`, `darcy_reference_iterations=1200`.
+- If a paper-demo model does not reduce total history, rerun that tier with `learning_rate=0.005` and `training_steps=1200`.
+
+Minimum paper-demo outputs:
+
+- Per-model field panels for Darcy, Stokes, Oseen, and Navier-Stokes.
+- Per-model convergence panels showing total and component losses.
+- A cross-model metrics table derived from `summary/cross_model_report.json`.
+- A `run_manifest.json` that records git commit, config values, output directories, metric summary, and whether each history decreased.
+
+Non-goals for the next pass:
+
+- Do not redefine the unit-square domain or residual APIs.
+- Do not claim final physical accuracy or rank PINN effectiveness from the moderate demo tier.
+- Do not commit generated experiment artifacts unless a later phase explicitly approves that policy change.
+- Do not add dependencies unless the existing declared dependencies are insufficient and the change is covered by tests.
 
 Required workflow for future phases:
 

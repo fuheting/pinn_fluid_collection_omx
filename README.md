@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-The current phase adds deterministic experiment orchestration for comparing PINN predictions against lightweight in-repo reference fields. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, and a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, and summary metrics.
+The current phase adds a narrow result-procurement runner around deterministic experiment orchestration for comparing PINN predictions against lightweight in-repo reference fields. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, and summary metrics, and a manifest-writing procurement surface for staged local runs.
 
 ## Planned Phases
 
@@ -28,6 +28,7 @@ The current phase adds deterministic experiment orchestration for comparing PINN
 | 8 | Experiment data schema and component-history recording | Complete |
 | 9 | CFD-backed Darcy and Poiseuille/Navier-Stokes vertical slice | Complete |
 | 10 | Stokes/Oseen experiment extension and consolidated report | Complete |
+| 11 | Narrow result-procurement runner and manifest | Complete |
 
 ## Repository Layout
 
@@ -256,6 +257,43 @@ Each experiment writes reproducible numeric artifacts under the configured outpu
 
 The first-pass success criterion is intentionally modest: histories should decrease over the tiny deterministic run and reported metrics should be finite. These runs are reproducible local experiment slices, not final accuracy claims.
 
+## Result Procurement Handoff
+
+Phase 11 adds `pinn_fluid.result_procurement.run_result_procurement(...)` and a `python -m pinn_fluid.result_procurement` entry point. The runner wraps the existing all-model experiment API, writes results under the configured output directory, and saves `run_manifest.json` with the git commit, config values, per-model output directories, artifact paths, metric summaries, finite-metric flags, and history-reduction flags.
+
+Example sanity procurement command:
+
+```bash
+PYTHONPATH=src python -m pinn_fluid.result_procurement \
+  --output-dir data/experiments_sanity \
+  --grid-points 9 \
+  --training-steps 80 \
+  --hidden-width 12 \
+  --hidden-layers 1 \
+  --learning-rate 0.02 \
+  --git-dir /tmp/pinn_fluid_collection_omx.gitdir \
+  --work-tree /home/hfu_nestle/projects/pinn_fluid_omx
+```
+
+Use the existing experiment API and this procurement runner to procure paper-draft figures and metrics in staged passes. Do not start with a long all-model run.
+
+Recommended sequence:
+
+1. Add a narrow, tested result-procurement surface that can run one configured experiment tier and summarize the saved artifacts.
+2. Run a fast sanity tier to verify that Darcy, Stokes, Oseen, and Navier-Stokes still produce finite metrics and decreasing histories.
+3. Run a laptop-moderate paper-demo tier with larger grids and more optimizer steps.
+4. Generate per-model figure panels from saved `fields.npz` and `history.json` artifacts.
+5. Generate a cross-model metrics table from `summary/cross_model_report.json`.
+
+Minimum paper-demo figure bundle:
+
+- Darcy panel: predicted pressure, reference pressure, pressure error, predicted velocity magnitude, reference velocity magnitude, and residual magnitude.
+- Stokes/Oseen/Navier-Stokes panels: predicted `u`, `v`, speed, and pressure; reference `u`, `v`, speed, and pressure; scalar residual magnitude.
+- Convergence panels: total objective and every recorded loss component versus iteration for each model.
+- Cross-model table: final objective, velocity L2, pressure L2, and residual RMS.
+
+Keep generated outputs under ignored local paths such as `data/experiments_sanity/` and `data/experiments_paper_demo/`. Commit source, tests, and documentation only; do not commit generated `.npz`, `.json`, or `.png` experiment artifacts unless a future phase explicitly changes that policy.
+
 ## Environment Direction
 
 PyTorch is the intended machine-learning framework for future phases. Phase 1 tests only check package structure and import behavior; they do not require importing PyTorch.
@@ -278,4 +316,4 @@ python -m pytest
 
 The remaining research work is to run broader, longer experiments with selected grid sizes and training budgets, then analyze how the reported metrics change with the enforced physics model. Keep those studies separate from the lightweight regression-oriented defaults in `pinn_fluid.experiments`.
 
-New agents should start with this `README.md` and `progress.md`. Continue the established style: tests first, narrow implementation, docs/progress update, fresh verification, Lore commit, then push `origin main` with the temp gitdir/worktree command when needed.
+New agents should start with this `README.md` and `progress.md`. Continue the established style: tests first, narrow implementation, docs/progress update, fresh verification, Lore commit, then push `origin main` with the temp gitdir/worktree command when needed. Split the result-procurement work into staged phases rather than trying to produce the full study in one pass.
