@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-Phase 6 now has a consolidated smoke benchmark summary on top of the same shared unit-square domain. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, and phase-ordered loss summaries for those smoke loops.
+The current phase adds an analytic Poiseuille-style Navier-Stokes benchmark on the same shared unit-square domain. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered loss summaries for those smoke loops, and a closed-form laminar channel reference that has zero steady Navier-Stokes residual under the existing autograd helpers.
 
 ## Planned Phases
 
@@ -24,6 +24,7 @@ Phase 6 now has a consolidated smoke benchmark summary on top of the same shared
 | 4 | Reduced-order Navier-Stokes through Oseen equations | Training smoke foundation complete |
 | 5 | Laminar Navier-Stokes examples such as channel or Poiseuille flow | Training smoke foundation complete |
 | 6 | Documentation, cleanup, and consolidated test coverage | Smoke benchmark summary complete |
+| 7 | Analytic Poiseuille Navier-Stokes benchmark | Residual validation complete |
 
 ## Repository Layout
 
@@ -218,6 +219,20 @@ Phase 6 adds `pinn_fluid.benchmarks` as a lightweight reporting surface across t
 
 These summaries are only wiring checks for local regression tests. They do not replace validated physical benchmark cases or convergence studies.
 
+## Analytic Poiseuille Benchmark
+
+The Navier-Stokes model utilities now include a closed-form horizontal channel reference on the unit square:
+
+```text
+u(x, y) = 4 U y (1 - y)
+v(x, y) = 0
+p(x, y) = p0 - 8 mu U x
+```
+
+`poiseuille_channel_solution(...)` returns differentiable `u`, `v`, and `pressure` tensors for this profile. `poiseuille_pressure_drop(...)` returns the corresponding pressure drop over a channel length. Tests verify that the profile satisfies the steady incompressible Navier-Stokes residuals and horizontal wall no-slip behavior.
+
+This is an analytic residual benchmark, not a trained PINN comparison against the analytic solution.
+
 ## Environment Direction
 
 PyTorch is the intended machine-learning framework for future phases. Phase 1 tests only check package structure and import behavior; they do not require importing PyTorch.
@@ -238,4 +253,4 @@ python -m pytest
 
 ## Continuing The Model Phases
 
-Next, add documented example outputs after a fuller Navier-Stokes benchmark exists.
+Next, compare a trained Navier-Stokes field against the analytic Poiseuille reference on a lightweight documented example.

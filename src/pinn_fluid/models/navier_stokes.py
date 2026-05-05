@@ -14,6 +14,38 @@ DEFAULT_NAVIER_STOKES_LOSS_WEIGHTS: dict[str, float] = {
 }
 
 
+def poiseuille_pressure_drop(
+    viscosity: float,
+    peak_velocity: float = 1.0,
+    *,
+    length: float = 1.0,
+) -> float:
+    """Return the pressure drop for the unit-height parabolic channel profile."""
+
+    return 8.0 * viscosity * peak_velocity * length
+
+
+def poiseuille_channel_solution(
+    coordinates: torch.Tensor,
+    *,
+    viscosity: float,
+    peak_velocity: float = 1.0,
+    pressure_reference: float = 0.0,
+) -> dict[str, torch.Tensor]:
+    """Return an analytic horizontal Poiseuille solution on the unit square."""
+
+    x = coordinates[:, :1]
+    y = coordinates[:, 1:2]
+    u = 4.0 * peak_velocity * y * (1.0 - y)
+    v = x * 0.0
+    pressure = pressure_reference - poiseuille_pressure_drop(viscosity, peak_velocity) * x
+    return {
+        "u": u,
+        "v": v,
+        "pressure": pressure,
+    }
+
+
 def _gradient(field: torch.Tensor, coordinates: torch.Tensor) -> torch.Tensor:
     return torch.autograd.grad(
         field,
@@ -100,4 +132,6 @@ def navier_stokes_residuals(
 __all__ = [
     "DEFAULT_NAVIER_STOKES_LOSS_WEIGHTS",
     "navier_stokes_residuals",
+    "poiseuille_channel_solution",
+    "poiseuille_pressure_drop",
 ]

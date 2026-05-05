@@ -32,6 +32,7 @@ Explicitly not completed:
 | 4 | Oseen equation formulation and convergence checks | Training smoke foundation complete |
 | 5 | Laminar Navier-Stokes formulation and common channel-flow cases | Training smoke foundation complete |
 | 6 | Documentation consolidation and cleanup across implemented models | Smoke benchmark summary complete |
+| 7 | Analytic Poiseuille Navier-Stokes benchmark | Residual validation complete |
 
 ## Phase 2: Darcy Flow
 
@@ -188,3 +189,19 @@ Completed in this pass:
 Remaining:
 
 - Add documented physical example outputs after a fuller validated benchmark exists.
+
+## Phase 7: Analytic Poiseuille Navier-Stokes Benchmark
+
+Status: residual validation complete.
+
+Completed in this pass:
+
+- Added a closed-form horizontal Poiseuille channel solution on the existing unit-square geometry.
+- Added pressure-drop metadata for the parabolic channel profile.
+- Added tests showing the analytic field has the expected velocity profile and pressure drop.
+- Added tests showing the analytic field has zero steady incompressible Navier-Stokes residual under the current autograd helpers.
+- Added tests showing the analytic field satisfies horizontal wall no-slip behavior.
+
+Remaining:
+
+- Compare a trained Navier-Stokes field against this analytic reference in a lightweight documented example.
