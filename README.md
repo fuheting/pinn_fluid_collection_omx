@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-Phase 5 now has a Navier-Stokes residual and training smoke foundation on the same shared unit-square domain. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, and lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops.
+Phase 6 now has a consolidated smoke benchmark summary on top of the same shared unit-square domain. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, and phase-ordered loss summaries for those smoke loops.
 
 ## Planned Phases
 
@@ -23,7 +23,7 @@ Phase 5 now has a Navier-Stokes residual and training smoke foundation on the sa
 | shared foundation | Stokes loss assembly and training smoke loop | Foundation complete |
 | 4 | Reduced-order Navier-Stokes through Oseen equations | Training smoke foundation complete |
 | 5 | Laminar Navier-Stokes examples such as channel or Poiseuille flow | Training smoke foundation complete |
-| 6 | Documentation, cleanup, and consolidated test coverage | Pending |
+| 6 | Documentation, cleanup, and consolidated test coverage | Smoke benchmark summary complete |
 
 ## Repository Layout
 
@@ -44,7 +44,7 @@ Phase 5 now has a Navier-Stokes residual and training smoke foundation on the sa
 └── requirements.txt
 ```
 
-The `src/pinn_fluid` package now contains the shared domain abstraction, Darcy-flow residual utilities, Stokes-flow residual utilities, Oseen residual utilities, Navier-Stokes residual utilities, minimal neural field modules, and smoke-training utilities for Darcy, Stokes, Oseen, and Navier-Stokes flow.
+The `src/pinn_fluid` package now contains the shared domain abstraction, Darcy-flow residual utilities, Stokes-flow residual utilities, Oseen residual utilities, Navier-Stokes residual utilities, minimal neural field modules, smoke-training utilities for Darcy, Stokes, Oseen, and Navier-Stokes flow, and a consolidated smoke benchmark summary module.
 
 ## Shared Example Domain
 
@@ -207,6 +207,16 @@ The current Navier-Stokes implementation includes:
 - a small deterministic optimization smoke loop that verifies local loss reduction
 
 The smoke loop checks training-path wiring and loss reduction on a tiny collocation set. It is not a validated Navier-Stokes benchmark or convergence study.
+
+## Consolidated Smoke Benchmark Summary
+
+Phase 6 adds `pinn_fluid.benchmarks` as a lightweight reporting surface across the implemented model families:
+
+- `SmokeBenchmarkConfig` defines a tiny deterministic run shape shared by Darcy, Stokes, Oseen, and Navier-Stokes smoke loops.
+- `run_smoke_benchmarks(...)` returns phase-ordered `SmokeBenchmarkResult` entries for Darcy, Stokes, Oseen, and Navier-Stokes.
+- `summarize_loss_history(...)` converts a loss history into initial loss, final loss, step count, absolute reduction, fractional reduction, and reduction status.
+
+These summaries are only wiring checks for local regression tests. They do not replace validated physical benchmark cases or convergence studies.
 
 ## Environment Direction
 

@@ -31,7 +31,7 @@ Explicitly not completed:
 | shared foundation | Stokes loss assembly and training smoke loop | Foundation complete |
 | 4 | Oseen equation formulation and convergence checks | Training smoke foundation complete |
 | 5 | Laminar Navier-Stokes formulation and common channel-flow cases | Training smoke foundation complete |
-| 6 | Documentation consolidation and cleanup across implemented models | Pending |
+| 6 | Documentation consolidation and cleanup across implemented models | Smoke benchmark summary complete |
 
 ## Phase 2: Darcy Flow
 
@@ -173,3 +173,18 @@ Completed in this pass:
 Remaining:
 
 - Add example output documentation once a fuller Navier-Stokes benchmark exists.
+
+## Phase 6: Consolidated Smoke Benchmark Summary
+
+Status: smoke benchmark summary complete.
+
+Completed in this pass:
+
+- Added a phase-ordered smoke benchmark summary surface across Darcy, Stokes, Oseen, and Navier-Stokes.
+- Reused the existing shared unit-square collocation samplers, neural fields, and training smoke loops without redefining geometry.
+- Added structured result metadata for initial loss, final loss, optimizer step count, absolute reduction, fractional reduction, and reduction status.
+- Added tests for loss-history summarization, empty-history validation, model ordering, and deterministic loss reduction across the tiny smoke benchmark set.
+
+Remaining:
+
+- Add documented physical example outputs after a fuller validated benchmark exists.
