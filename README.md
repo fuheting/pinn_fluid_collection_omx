@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-The current phase adds a narrow result-procurement runner around deterministic experiment orchestration for comparing PINN predictions against lightweight in-repo reference fields. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, and summary metrics, and a manifest-writing procurement surface for staged local runs.
+The current phase adds figure-generation utilities for saved deterministic experiment artifacts. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, and summary metrics, a manifest-writing procurement surface for staged local runs, and standalone figure panels generated from saved `fields.npz` and `history.json` artifacts.
 
 ## Planned Phases
 
@@ -29,6 +29,9 @@ The current phase adds a narrow result-procurement runner around deterministic e
 | 9 | CFD-backed Darcy and Poiseuille/Navier-Stokes vertical slice | Complete |
 | 10 | Stokes/Oseen experiment extension and consolidated report | Complete |
 | 11 | Narrow result-procurement runner and manifest | Complete |
+| 12 | Figure-generation utilities for saved experiment artifacts | Complete |
+| 13 | Local sanity and paper-demo result runs | Planned |
+| 14 | Result-procurement documentation, figure inventory, and limitations | Planned |
 
 ## Repository Layout
 
@@ -279,11 +282,26 @@ Use the existing experiment API and this procurement runner to procure paper-dra
 
 Recommended sequence:
 
-1. Add a narrow, tested result-procurement surface that can run one configured experiment tier and summarize the saved artifacts.
-2. Run a fast sanity tier to verify that Darcy, Stokes, Oseen, and Navier-Stokes still produce finite metrics and decreasing histories.
-3. Run a laptop-moderate paper-demo tier with larger grids and more optimizer steps.
-4. Generate per-model figure panels from saved `fields.npz` and `history.json` artifacts.
-5. Generate a cross-model metrics table from `summary/cross_model_report.json`.
+1. Phase 13: run a fast sanity tier to verify that Darcy, Stokes, Oseen, and Navier-Stokes still produce finite metrics and decreasing histories.
+2. Phase 13: run a laptop-moderate paper-demo tier with larger grids and more optimizer steps.
+3. Phase 14: document the actual result-procurement commands, figure inventory, generated artifact locations, and known limitations from the completed runs.
+4. Phase 14: generate or document a cross-model metrics table from `summary/cross_model_report.json`.
+
+## Figure Generation Handoff
+
+Phase 12 adds `pinn_fluid.figures.generate_figure_bundle(...)` and a `python -m pinn_fluid.figures` entry point for generating paper-draft panels from saved experiment artifacts. It reads each available model directory under an experiment output root, expects `fields.npz` and `history.json`, writes panel PNGs under `figures/`, and records the generated paths in `figures/figure_manifest.json`.
+
+Example command after a procurement run:
+
+```bash
+PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
+```
+
+Generated Phase 12 panels:
+
+- Darcy field panel: predicted pressure, reference pressure, pressure error, predicted velocity magnitude, reference velocity magnitude, and residual magnitude.
+- Stokes/Oseen/Navier-Stokes field panels: predicted `u`, `v`, speed, and pressure; reference `u`, `v`, speed, and pressure; residual magnitude.
+- Per-model convergence panels: total objective and every recorded component loss versus iteration.
 
 Minimum paper-demo figure bundle:
 

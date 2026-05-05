@@ -37,6 +37,9 @@ Explicitly not completed:
 | 9 | CFD-backed Darcy and Poiseuille/Navier-Stokes vertical slice | Complete |
 | 10 | Stokes/Oseen experiment extension and consolidated report | Complete |
 | 11 | Result-procurement runner and manifest | Complete |
+| 12 | Figure-generation utilities for saved experiment artifacts | Complete |
+| 13 | Local sanity and paper-demo result runs | Planned |
+| 14 | Result-procurement documentation, figure inventory, and limitations | Planned |
 
 ## Phase 2: Darcy Flow
 
@@ -293,8 +296,25 @@ Completed in this pass:
 
 Remaining:
 
-- Phase 12 should add standalone figure-generation utilities from saved artifacts rather than expanding the runner.
 - Phase 13 should use the runner for sanity and paper-demo tiers without committing generated data artifacts.
+
+## Phase 12: Figure Generation From Saved Artifacts
+
+Status: complete.
+
+Completed in this pass:
+
+- Added `pinn_fluid.figures.generate_figure_bundle(...)` for standalone figure generation from saved experiment output directories.
+- Added `python -m pinn_fluid.figures <output_dir>` as a narrow CLI surface for local figure procurement.
+- Generated per-model field panels from `fields.npz`: Darcy pressure, velocity magnitude, pressure error, and residual magnitude; Stokes/Oseen/Navier-Stokes velocity components, speed, pressure, references, and residual magnitude.
+- Generated per-model convergence panels from `history.json` with the total objective and all recorded component losses.
+- Wrote `figures/figure_manifest.json` with the generated panel paths.
+- Added tests that first failed on the missing `pinn_fluid.figures` module, then verified Darcy and velocity-pressure panels against small synthetic `fields.npz` and `history.json` fixtures.
+
+Remaining:
+
+- Phase 13 should use the result-procurement runner and this figure bundle utility on actual sanity and paper-demo tiers without committing generated output artifacts.
+- Phase 14 should document the actual commands, figure inventory, artifact locations, and limitations from those completed local runs.
 
 ## Next Result-Procurement Phases
 
@@ -302,9 +322,8 @@ Do not ask the next agent to complete the entire result study in one uninterrupt
 
 Recommended next phases:
 
-1. Phase 12: Add figure-generation utilities for saved experiment artifacts with tests against small synthetic `fields.npz` and `history.json` inputs.
-2. Phase 13: Run the sanity tier and laptop-moderate paper-demo tier locally, record the manifest, and summarize generated artifact paths without committing bulky outputs.
-3. Phase 14: Update documentation with result-procurement commands, figure inventory, and known limitations from the actual run.
+1. Phase 13: Run the sanity tier and laptop-moderate paper-demo tier locally, record the manifest, generate figure panels, and summarize generated artifact paths without committing bulky outputs.
+2. Phase 14: Update documentation with result-procurement commands, figure inventory, and known limitations from the actual run.
 
 Suggested initial run tiers:
 
