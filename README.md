@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-The current phase adds figure-generation utilities for saved deterministic experiment artifacts. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, and summary metrics, a manifest-writing procurement surface for staged local runs, and standalone figure panels generated from saved `fields.npz` and `history.json` artifacts.
+The current phase has procured local sanity and paper-demo experiment artifacts from the staged runner. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, and summary metrics, a manifest-writing procurement surface for staged local runs, and standalone figure panels generated from saved `fields.npz` and `history.json` artifacts.
 
 ## Planned Phases
 
@@ -30,7 +30,7 @@ The current phase adds figure-generation utilities for saved deterministic exper
 | 10 | Stokes/Oseen experiment extension and consolidated report | Complete |
 | 11 | Narrow result-procurement runner and manifest | Complete |
 | 12 | Figure-generation utilities for saved experiment artifacts | Complete |
-| 13 | Local sanity and paper-demo result runs | Planned |
+| 13 | Local sanity and paper-demo result runs | Complete |
 | 14 | Result-procurement documentation, figure inventory, and limitations | Planned |
 
 ## Repository Layout
@@ -282,10 +282,8 @@ Use the existing experiment API and this procurement runner to procure paper-dra
 
 Recommended sequence:
 
-1. Phase 13: run a fast sanity tier to verify that Darcy, Stokes, Oseen, and Navier-Stokes still produce finite metrics and decreasing histories.
-2. Phase 13: run a laptop-moderate paper-demo tier with larger grids and more optimizer steps.
-3. Phase 14: document the actual result-procurement commands, figure inventory, generated artifact locations, and known limitations from the completed runs.
-4. Phase 14: generate or document a cross-model metrics table from `summary/cross_model_report.json`.
+1. Phase 14: document the actual result-procurement commands, figure inventory, generated artifact locations, and known limitations from the completed Phase 13 runs.
+2. Phase 14: generate or document a cross-model metrics table from `summary/cross_model_report.json`.
 
 ## Figure Generation Handoff
 
@@ -302,6 +300,64 @@ Generated Phase 12 panels:
 - Darcy field panel: predicted pressure, reference pressure, pressure error, predicted velocity magnitude, reference velocity magnitude, and residual magnitude.
 - Stokes/Oseen/Navier-Stokes field panels: predicted `u`, `v`, speed, and pressure; reference `u`, `v`, speed, and pressure; residual magnitude.
 - Per-model convergence panels: total objective and every recorded component loss versus iteration.
+
+## Phase 13 Local Runs
+
+Phase 13 procured two ignored local output tiers with the Phase 11 runner and Phase 12 figure bundle utility. The manifests record git commit `6c92946`, which was the local Phase 12 commit available when the temporary gitdir was unavailable in this shell.
+
+Sanity tier command:
+
+```bash
+PYTHONPATH=src python -m pinn_fluid.result_procurement \
+  --output-dir data/experiments_sanity \
+  --grid-points 9 \
+  --training-steps 80 \
+  --hidden-width 12 \
+  --hidden-layers 1 \
+  --learning-rate 0.02 \
+  --seed 0 \
+  --viscosity 0.25 \
+  --peak-velocity 1.0 \
+  --darcy-reference-iterations 400 \
+  --git-commit 6c92946
+PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
+```
+
+Paper-demo tier command:
+
+```bash
+PYTHONPATH=src python -m pinn_fluid.result_procurement \
+  --output-dir data/experiments_paper_demo \
+  --grid-points 31 \
+  --training-steps 800 \
+  --hidden-width 24 \
+  --hidden-layers 2 \
+  --learning-rate 0.01 \
+  --seed 0 \
+  --viscosity 0.25 \
+  --peak-velocity 1.0 \
+  --darcy-reference-iterations 1200 \
+  --git-commit 6c92946
+PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo
+```
+
+The first paper-demo run reduced every model history, so the fallback `learning_rate=0.005` and `training_steps=1200` rerun was not used.
+
+Paper-demo metrics:
+
+| Model | Final objective | Velocity L2 | Pressure L2 | Residual RMS |
+| --- | ---: | ---: | ---: | ---: |
+| Darcy | 0.119401 | 0.319252 | 0.211299 | 0.118235 |
+| Stokes | 0.000218439 | 0.000880394 | 0.00243016 | 0.0304391 |
+| Oseen | 0.000276085 | 0.00149186 | 0.00306 | 0.0350645 |
+| Navier-Stokes | 0.000277937 | 0.00111077 | 0.00200808 | 0.0370115 |
+
+Generated local artifact roots:
+
+- `data/experiments_sanity/`
+- `data/experiments_paper_demo/`
+
+Each root contains `run_manifest.json`, per-model `fields.npz`, `history.json`, `metrics.json`, raw single-field plots, `summary/cross_model_report.json`, `summary/cross_model_report.md`, and Phase 12 panels under `figures/`.
 
 Minimum paper-demo figure bundle:
 

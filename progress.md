@@ -38,7 +38,7 @@ Explicitly not completed:
 | 10 | Stokes/Oseen experiment extension and consolidated report | Complete |
 | 11 | Result-procurement runner and manifest | Complete |
 | 12 | Figure-generation utilities for saved experiment artifacts | Complete |
-| 13 | Local sanity and paper-demo result runs | Planned |
+| 13 | Local sanity and paper-demo result runs | Complete |
 | 14 | Result-procurement documentation, figure inventory, and limitations | Planned |
 
 ## Phase 2: Darcy Flow
@@ -316,14 +316,50 @@ Remaining:
 - Phase 13 should use the result-procurement runner and this figure bundle utility on actual sanity and paper-demo tiers without committing generated output artifacts.
 - Phase 14 should document the actual commands, figure inventory, artifact locations, and limitations from those completed local runs.
 
+## Phase 13: Local Sanity And Paper-Demo Runs
+
+Status: complete.
+
+Completed in this pass:
+
+- Ran the sanity tier at `grid_points=9`, `training_steps=80`, `hidden_width=12`, `hidden_layers=1`, `learning_rate=0.02`, `seed=0`, `viscosity=0.25`, `peak_velocity=1.0`, and `darcy_reference_iterations=400`.
+- Wrote sanity artifacts under ignored `data/experiments_sanity/`.
+- Generated sanity Phase 12 panels under `data/experiments_sanity/figures/`.
+- Ran the paper-demo tier at `grid_points=31`, `training_steps=800`, `hidden_width=24`, `hidden_layers=2`, `learning_rate=0.01`, `seed=0`, `viscosity=0.25`, `peak_velocity=1.0`, and `darcy_reference_iterations=1200`.
+- Wrote paper-demo artifacts under ignored `data/experiments_paper_demo/`.
+- Generated paper-demo Phase 12 panels under `data/experiments_paper_demo/figures/`.
+- Confirmed both run manifests reported `all_metrics_finite=true` and `all_histories_decreased=true`.
+- Skipped the fallback `learning_rate=0.005`, `training_steps=1200` paper-demo rerun because all first-pass paper-demo histories decreased.
+
+Paper-demo metrics:
+
+| Model | Initial objective | Final objective | Velocity L2 | Pressure L2 | Residual RMS |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Darcy | 10.4557 | 0.119401 | 0.319252 | 0.211299 | 0.118235 |
+| Stokes | 6.43499 | 0.000218439 | 0.000880394 | 0.00243016 | 0.0304391 |
+| Oseen | 6.41629 | 0.000276085 | 0.00149186 | 0.00306 | 0.0350645 |
+| Navier-Stokes | 6.43666 | 0.000277937 | 0.00111077 | 0.00200808 | 0.0370115 |
+
+Generated local outputs:
+
+- `data/experiments_sanity/run_manifest.json`
+- `data/experiments_sanity/figures/figure_manifest.json`
+- `data/experiments_paper_demo/run_manifest.json`
+- `data/experiments_paper_demo/figures/figure_manifest.json`
+- Per-model `fields.npz`, `history.json`, `metrics.json`, raw plots, and figure panels under each ignored output root.
+
+Notes:
+
+- The manifests record git commit `6c92946`, the local Phase 12 commit available when the temporary gitdir was unavailable in this shell.
+- These moderate results are procurement evidence only. They should not be used to rank physical accuracy or PINN effectiveness across models.
+
 ## Next Result-Procurement Phases
 
 Do not ask the next agent to complete the entire result study in one uninterrupted run. Preserve the phased style and make each phase testable.
 
 Recommended next phases:
 
-1. Phase 13: Run the sanity tier and laptop-moderate paper-demo tier locally, record the manifest, generate figure panels, and summarize generated artifact paths without committing bulky outputs.
-2. Phase 14: Update documentation with result-procurement commands, figure inventory, and known limitations from the actual run.
+1. Phase 14: Update documentation with result-procurement commands, figure inventory, and known limitations from the actual run.
 
 Suggested initial run tiers:
 
