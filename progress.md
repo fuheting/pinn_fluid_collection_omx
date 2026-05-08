@@ -43,6 +43,10 @@ Explicitly not completed:
 | 15 | Reference-generation audit and metadata contracts | Complete |
 | 16 | Darcy ground truth hardening | Complete |
 | 17 | Stokes model-specific manufactured ground truth | Complete |
+| 18 | Oseen model-specific ground truth | Planned |
+| 19 | Navier-Stokes model-specific ground truth | Planned |
+| 20 | True performance comparison run with model-specific actual fields | Planned |
+| 21 | Dedicated external CFD/scientific-computing reference solve with OpenFOAM, FEniCS, FiPy, or similar | Planned |
 
 ## Phase 2: Darcy Flow
 
@@ -573,6 +577,31 @@ python -m pytest tests/test_phase17_stokes_reference.py
 PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
 PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
 ```
+
+## Planned Phase 21: Dedicated Reference Solver Integration
+
+Status: planned.
+
+Purpose:
+
+- Add an external or dedicated scientific-computing solver reference after the lightweight in-repo model-specific references exist.
+- Candidate stacks include OpenFOAM, FEniCS, FiPy, SciPy-based finite-volume/finite-difference tooling, or another documented solver chosen through a small dependency and reproducibility review.
+- Use the dedicated solver as a validation layer for one or more precisely documented benchmark cases, not as an implicit replacement for the current regression-friendly references.
+
+Required scope:
+
+- Write a solver-selection decision record covering installability, version, license, reproducibility, CI/local runtime cost, and data-import format.
+- Define the exact geometry, mesh, boundary conditions, material parameters, coordinate convention, and expected field variables.
+- Generate or import pressure, `u`, `v`, speed, and model-appropriate conservation/residual diagnostics.
+- Preserve existing artifact compatibility: `fields.npz`, `metrics.json`, `history.json`, `run_manifest.json`, figure manifests, field panels, convergence plots, and quiver diagnostics.
+- Add tests for importer orientation, flattening order, units/scaling, finite values, boundary masks, and schema compatibility.
+- Keep generated solver cases, meshes, logs, `.npz`, `.json`, and `.png` outputs under ignored `data/` paths unless explicitly approved for commit.
+
+Limitations to document when executed:
+
+- The first dedicated-solver phase should validate only the selected benchmark case.
+- It should not claim broad physical accuracy or model ranking beyond the solver settings, mesh, and training budget used.
+- It should record any mismatch between the shared unit-square inlet/outlet geometry and solver-native benchmark assumptions.
 
 ## Continuing Guidance
 

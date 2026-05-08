@@ -35,6 +35,10 @@ The current phase adds a Stokes-specific manufactured actual field before Oseen 
 | 15 | Reference-generation audit and metadata contracts | Complete |
 | 16 | Darcy ground truth hardening | Complete |
 | 17 | Stokes model-specific manufactured ground truth | Complete |
+| 18 | Oseen model-specific ground truth | Planned |
+| 19 | Navier-Stokes model-specific ground truth | Planned |
+| 20 | True performance comparison run with model-specific actual fields | Planned |
+| 21 | Dedicated external CFD/scientific-computing reference solve with OpenFOAM, FEniCS, FiPy, or similar | Planned |
 
 ## Repository Layout
 
@@ -555,6 +559,23 @@ PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experim
 PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
 ```
 
+## Phase 21 Dedicated Reference Solver Integration
+
+Phase 21 is reserved for solving one or more shared-domain flow cases with a dedicated CFD or scientific-computing stack instead of relying only on in-repo manufactured or finite-difference references. Candidate stacks include OpenFOAM for CFD-grade finite-volume solves, FEniCS for finite-element weak-form solves, FiPy or SciPy-based finite-volume/finite-difference prototypes, or another documented solver chosen after a dependency and reproducibility review.
+
+The phase should start with a narrow solver-selection decision record and a tiny reproducible benchmark. It should not silently replace the in-repo references. It should write imported solver fields into the existing artifact schema so figures, metrics, manifests, and comparison reports remain compatible.
+
+Minimum acceptance criteria:
+
+- Document the selected solver stack, installation path, version, and license constraints.
+- Define the exact benchmark geometry, boundary conditions, viscosity/permeability parameters, and coordinate convention.
+- Generate pressure, `u`, `v`, speed, and model-appropriate residual or conservation diagnostics.
+- Add importer tests for field orientation, flattening order, units/scaling, finite values, and artifact schema compatibility.
+- Keep generated OpenFOAM case outputs, mesh files, logs, `.npz`, `.json`, and `.png` artifacts under ignored `data/` paths unless explicitly approved for commit.
+- Compare at least one PINN result against the dedicated-solver reference without claiming general physical accuracy beyond the solved benchmark.
+
+This phase should run after the lightweight model-specific in-repo references exist, so the dedicated solver can serve as an external validation layer rather than blocking the current Phases 18-20.
+
 ## Environment Direction
 
 PyTorch is the intended machine-learning framework for future phases. Phase 1 tests only check package structure and import behavior; they do not require importing PyTorch.
@@ -575,6 +596,6 @@ python -m pytest
 
 ## Continuing The Model Phases
 
-The remaining research work is to run broader, longer experiments with selected grid sizes and training budgets, then analyze how the reported metrics change with the enforced physics model. Keep those studies separate from the lightweight regression-oriented defaults in `pinn_fluid.experiments`.
+The remaining research work is to finish the Oseen and Navier-Stokes model-specific references, run broader comparison studies with selected grid sizes and training budgets, then add a dedicated external CFD/scientific-computing reference-solver phase for validation-quality benchmarks. Keep those studies separate from the lightweight regression-oriented defaults in `pinn_fluid.experiments`.
 
 New agents should start with this `README.md` and `progress.md`. Continue the established style: tests first, narrow implementation, docs/progress update, fresh verification, Lore commit, then push `origin main` with the temp gitdir/worktree command when needed. Split the result-procurement work into staged phases rather than trying to produce the full study in one pass.
