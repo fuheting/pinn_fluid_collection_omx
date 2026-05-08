@@ -290,11 +290,13 @@ Example command after a procurement run:
 PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
 ```
 
-Generated Phase 12 panels:
+Generated Phase 12 figures:
 
 - Darcy field panel: predicted pressure, reference pressure, pressure error, predicted velocity magnitude, reference velocity magnitude, and residual magnitude.
 - Stokes/Oseen/Navier-Stokes field panels: predicted `u`, `v`, speed, and pressure; reference `u`, `v`, speed, and pressure; residual magnitude.
+- Separate scalar field images for Stokes/Oseen/Navier-Stokes predicted, actual, and residual/error `u`, `v`, and pressure fields.
 - Per-model convergence panels: total objective and every recorded component loss versus iteration.
+- Figure manifests include panel titles, convergence legend entries, and scalar colorbar labels.
 
 ## Phase 13 Local Runs
 
@@ -356,7 +358,7 @@ Each root contains `run_manifest.json`, per-model `fields.npz`, `history.json`, 
 
 ## Phase 14 Figure Inventory And Limits
 
-The Phase 13 paper-demo bundle in `data/experiments_paper_demo/` satisfies the minimum paper-demo figure inventory without committing generated files. The same file pattern exists for `data/experiments_sanity/`.
+The Phase 13 paper-demo bundle in `data/experiments_paper_demo/` satisfies the minimum paper-demo figure inventory without committing generated files. The same file pattern exists for `data/experiments_sanity/`. Regenerate the bundle with `PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo` after changing figure code.
 
 Paper-demo figure inventory:
 
@@ -376,6 +378,18 @@ Paper-demo numeric and report artifacts:
 - `data/experiments_paper_demo/{darcy,stokes,oseen,navier_stokes}/fields.npz`
 - `data/experiments_paper_demo/{darcy,stokes,oseen,navier_stokes}/history.json`
 - `data/experiments_paper_demo/{darcy,stokes,oseen,navier_stokes}/metrics.json`
+
+Separate paper-demo scalar images:
+
+- `data/experiments_paper_demo/figures/{stokes,oseen,navier_stokes}_predicted_u.png`
+- `data/experiments_paper_demo/figures/{stokes,oseen,navier_stokes}_actual_u.png`
+- `data/experiments_paper_demo/figures/{stokes,oseen,navier_stokes}_residual_u.png`
+- `data/experiments_paper_demo/figures/{stokes,oseen,navier_stokes}_predicted_v.png`
+- `data/experiments_paper_demo/figures/{stokes,oseen,navier_stokes}_actual_v.png`
+- `data/experiments_paper_demo/figures/{stokes,oseen,navier_stokes}_residual_v.png`
+- `data/experiments_paper_demo/figures/{stokes,oseen,navier_stokes}_predicted_p.png`
+- `data/experiments_paper_demo/figures/{stokes,oseen,navier_stokes}_actual_p.png`
+- `data/experiments_paper_demo/figures/{stokes,oseen,navier_stokes}_residual_p.png`
 
 Minimum paper-demo figure bundle contents:
 

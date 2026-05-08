@@ -177,10 +177,43 @@ def _save_field_panel(
         axis.set_title(panel_title, fontsize=9)
         axis.set_xticks([])
         axis.set_yticks([])
-        fig.colorbar(image, ax=axis, fraction=0.046, pad=0.04)
+        colorbar = fig.colorbar(image, ax=axis, fraction=0.046, pad=0.04)
+        colorbar.set_label("scalar value", fontsize=8)
     for axis in flat_axes[len(panels) :]:
         axis.axis("off")
     fig.suptitle(title)
+    fig.tight_layout()
+    fig.savefig(path, dpi=140)
+    plt.close(fig)
+
+
+def _save_scalar_field_image(
+    values: np.ndarray,
+    *,
+    grid_points: int,
+    title: str,
+    path: Path,
+) -> None:
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ModuleNotFoundError:
+        _write_rgb_png(path, _fallback_scalar_image(values, grid_points, scale=28))
+        return
+
+    fig, axis = plt.subplots(figsize=(4.2, 3.4))
+    image = axis.imshow(
+        _reshape(values, grid_points),
+        origin="lower",
+        extent=(0, 1, 0, 1),
+    )
+    axis.set_title(title)
+    axis.set_xlabel("x")
+    axis.set_ylabel("y")
+    colorbar = fig.colorbar(image, ax=axis)
+    colorbar.set_label("scalar value")
     fig.tight_layout()
     fig.savefig(path, dpi=140)
     plt.close(fig)
@@ -210,6 +243,12 @@ def _save_convergence_panel(history: dict[str, object], *, title: str, path: Pat
     fig.tight_layout()
     fig.savefig(path, dpi=140)
     plt.close(fig)
+
+
+def _history_legend(history: dict[str, object]) -> list[str]:
+    components = history.get("components", {})
+    assert isinstance(components, dict)
+    return ["total"] + sorted(components)
 
 
 def _darcy_panels(fields: np.lib.npyio.NpzFile) -> list[tuple[str, np.ndarray]]:
@@ -243,10 +282,69 @@ def _velocity_pressure_panels(fields: np.lib.npyio.NpzFile) -> list[tuple[str, n
     ]
 
 
+def _darcy_separate_images(fields: np.lib.npyio.NpzFile) -> dict[str, tuple[str, np.ndarray]]:
+    predicted_pressure = _scalar(fields["predicted_pressure"])
+    reference_pressure = _scalar(fields["reference_pressure"])
+    return {
+        "predicted_p": ("Darcy predicted pressure", predicted_pressure),
+        "actual_p": ("Darcy actual pressure", reference_pressure),
+        "residual_p": ("Darcy pressure residual", np.abs(predicted_pressure - reference_pressure)),
+        "predicted_speed": ("Darcy predicted velocity magnitude", _magnitude(fields["predicted_velocity"])),
+        "actual_speed": ("Darcy actual velocity magnitude", _magnitude(fields["reference_velocity"])),
+        "residual_magnitude": ("Darcy equation residual magnitude", np.abs(_scalar(fields["residual"]))),
+    }
+
+
+def _velocity_pressure_separate_images(fields: np.lib.npyio.NpzFile) -> dict[str, tuple[str, np.ndarray]]:
+    predicted_u = _scalar(fields["predicted_u"])
+    predicted_v = _scalar(fields["predicted_v"])
+    predicted_p = _scalar(fields["predicted_pressure"])
+    actual_u = _scalar(fields["reference_u"])
+    actual_v = _scalar(fields["reference_v"])
+    actual_p = _scalar(fields["reference_pressure"])
+    return {
+        "predicted_u": ("Predicted u flow field", predicted_u),
+        "actual_u": ("Actual u flow field", actual_u),
+        "residual_u": ("Residual u flow field", np.abs(predicted_u - actual_u)),
+        "predicted_v": ("Predicted v flow field", predicted_v),
+        "actual_v": ("Actual v flow field", actual_v),
+        "residual_v": ("Residual v flow field", np.abs(predicted_v - actual_v)),
+        "predicted_p": ("Predicted pressure field", predicted_p),
+        "actual_p": ("Actual pressure field", actual_p),
+        "residual_p": ("Residual pressure field", np.abs(predicted_p - actual_p)),
+    }
+
+
 def _model_field_panels(model: str, fields: np.lib.npyio.NpzFile) -> tuple[list[tuple[str, np.ndarray]], int]:
     if model == "darcy":
         return _darcy_panels(fields), 3
     return _velocity_pressure_panels(fields), 3
+
+
+def _model_separate_images(model: str, fields: np.lib.npyio.NpzFile) -> dict[str, tuple[str, np.ndarray]]:
+    if model == "darcy":
+        return _darcy_separate_images(fields)
+    return _velocity_pressure_separate_images(fields)
+
+
+def _write_separate_images(
+    *,
+    model: str,
+    fields: np.lib.npyio.NpzFile,
+    grid_points: int,
+    root: Path,
+    target: Path,
+) -> dict[str, dict[str, str]]:
+    images: dict[str, dict[str, str]] = {}
+    for key, (title, values) in _model_separate_images(model, fields).items():
+        path = target / f"{model}_{key}.png"
+        _save_scalar_field_image(values, grid_points=grid_points, title=title, path=path)
+        images[key] = {
+            "path": path.relative_to(root).as_posix(),
+            "title": title,
+            "legend": "scalar value",
+        }
+    return images
 
 
 def generate_figure_bundle(
@@ -261,7 +359,7 @@ def generate_figure_bundle(
     target = root / "figures" if figures_dir is None else Path(figures_dir)
     target.mkdir(parents=True, exist_ok=True)
 
-    entries: list[dict[str, str]] = []
+    entries: list[dict[str, object]] = []
     for model in models:
         model_dir = root / model
         if not model_dir.exists():
@@ -275,25 +373,39 @@ def generate_figure_bundle(
             grid_points = _grid_points(fields)
             panels, columns = _model_field_panels(model, fields)
             field_panel = target / f"{model}_fields.png"
+            field_panel_title = f"{model} field comparison"
             _save_field_panel(
                 panels,
                 grid_points=grid_points,
                 columns=columns,
-                title=f"{model} field comparison",
+                title=field_panel_title,
                 path=field_panel,
+            )
+            separate_field_images = _write_separate_images(
+                model=model,
+                fields=fields,
+                grid_points=grid_points,
+                root=root,
+                target=target,
             )
 
         convergence_panel = target / f"{model}_convergence.png"
+        convergence_panel_title = f"{model} convergence"
+        history = _load_history(history_path)
         _save_convergence_panel(
-            _load_history(history_path),
-            title=f"{model} convergence",
+            history,
+            title=convergence_panel_title,
             path=convergence_panel,
         )
         entries.append(
             {
                 "model": model,
                 "field_panel": field_panel.relative_to(root).as_posix(),
+                "field_panel_title": field_panel_title,
                 "convergence_panel": convergence_panel.relative_to(root).as_posix(),
+                "convergence_panel_title": convergence_panel_title,
+                "convergence_legend": _history_legend(history),
+                "separate_field_images": separate_field_images,
             }
         )
 
