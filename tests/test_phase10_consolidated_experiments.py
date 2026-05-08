@@ -28,6 +28,9 @@ def test_run_all_experiments_adds_stokes_oseen_and_report(tmp_path):
     assert all(result.history.reduced for result in results)
     assert all(result.metrics["velocity_l2"] >= 0.0 for result in results)
     assert all(result.metrics["residual_rms"] >= 0.0 for result in results)
+    for result in results[1:]:
+        assert result.reference == "shared_patch_unit_square_reference"
+        assert {"inlet", "outlet", "wall"}.issubset(result.history.components)
 
     report = json.loads((tmp_path / "summary" / "cross_model_report.json").read_text())
     assert [entry["model"] for entry in report["results"]] == [

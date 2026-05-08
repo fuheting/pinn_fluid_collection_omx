@@ -19,7 +19,7 @@ from pinn_fluid.models.darcy import (
     darcy_velocity,
     laplace_residual,
 )
-from pinn_fluid.models.navier_stokes import navier_stokes_residuals, poiseuille_channel_solution
+from pinn_fluid.models.navier_stokes import navier_stokes_residuals
 from pinn_fluid.models.oseen import oseen_residuals
 from pinn_fluid.models.stokes import StokesVelocityPressureField, stokes_residuals
 from pinn_fluid.solvers.darcy import darcy_loss_components
@@ -126,15 +126,6 @@ def _grid_coordinates(grid_points: int) -> torch.Tensor:
     values = torch.linspace(0.0, 1.0, grid_points)
     grid_x, grid_y = torch.meshgrid(values, values, indexing="ij")
     return torch.stack((grid_x.reshape(-1), grid_y.reshape(-1)), dim=1)
-
-
-def _channel_boundary_coordinates(grid_points: int) -> torch.Tensor:
-    values = torch.linspace(0.0, 1.0, grid_points)
-    left = torch.stack((torch.zeros_like(values), values), dim=1)
-    right = torch.stack((torch.ones_like(values), values), dim=1)
-    bottom = torch.stack((values, torch.zeros_like(values)), dim=1)
-    top = torch.stack((values, torch.ones_like(values)), dim=1)
-    return torch.cat((left, right, bottom, top), dim=0)
 
 
 def _weighted_total(
@@ -339,6 +330,19 @@ def _fd_darcy_reference(grid_points: int, iterations: int) -> tuple[np.ndarray, 
     return pressure.reshape(-1, 1), velocity
 
 
+def _shared_patch_vector_reference(
+    grid_points: int,
+    iterations: int,
+) -> dict[str, np.ndarray]:
+    reference_pressure, reference_velocity = _fd_darcy_reference(grid_points, iterations)
+    return {
+        "u": reference_velocity[:, :1],
+        "v": reference_velocity[:, 1:2],
+        "pressure": reference_pressure,
+        "velocity": reference_velocity,
+    }
+
+
 def run_darcy_experiment(config: ExperimentConfig | None = None) -> ExperimentResult:
     """Run the deterministic Darcy PINN/reference vertical-slice experiment."""
 
@@ -418,41 +422,44 @@ def _vector_loss_components(
     model: torch.nn.Module,
     residual_builder: Callable[[dict[str, torch.Tensor], torch.Tensor], dict[str, torch.Tensor]],
     interior: torch.Tensor,
-    boundary: torch.Tensor,
+    boundary_samples: dict[str, dict[str, torch.Tensor]],
     *,
-    viscosity: float,
     peak_velocity: float,
 ) -> dict[str, torch.Tensor]:
     interior_autograd = interior.detach().clone().requires_grad_(True)
     outputs = model(interior_autograd)
     residuals = residual_builder(outputs, interior_autograd)
-    boundary_outputs = model(boundary)
-    boundary_reference = poiseuille_channel_solution(
-        boundary,
-        viscosity=viscosity,
-        peak_velocity=peak_velocity,
-    )
-    predicted_boundary = torch.cat(
-        (boundary_outputs["u"], boundary_outputs["v"], boundary_outputs["pressure"]),
+
+    inlet_coordinates = boundary_samples["inlet"]["coordinates"]
+    inlet_outputs = model(inlet_coordinates)
+    inlet_target = torch.tensor(
+        (0.0, -peak_velocity),
+        dtype=inlet_coordinates.dtype,
+        device=inlet_coordinates.device,
+    ).reshape(1, 2)
+
+    outlet_outputs = model(boundary_samples["outlet"]["coordinates"])
+    wall_outputs = model(boundary_samples["walls"]["coordinates"])
+    wall_velocity = torch.cat(
+        (wall_outputs["u"], wall_outputs["v"]),
         dim=1,
     )
-    reference_boundary = torch.cat(
-        (
-            boundary_reference["u"],
-            boundary_reference["v"],
-            boundary_reference["pressure"],
-        ),
+    inlet_velocity = torch.cat(
+        (inlet_outputs["u"], inlet_outputs["v"]),
         dim=1,
     )
+
     return {
         "continuity": residuals["continuity"].square().mean(),
         "x_momentum": residuals["x_momentum"].square().mean(),
         "y_momentum": residuals["y_momentum"].square().mean(),
-        "boundary": (predicted_boundary - reference_boundary).square().mean(),
+        "inlet": (inlet_velocity - inlet_target).square().mean(),
+        "outlet": outlet_outputs["pressure"].square().mean(),
+        "wall": wall_velocity.square().mean(),
     }
 
 
-def _run_poiseuille_vector_experiment(
+def _run_shared_patch_vector_experiment(
     *,
     model_name: str,
     reference: str,
@@ -469,12 +476,14 @@ def _run_poiseuille_vector_experiment(
         hidden_layers=config.hidden_layers,
     )
     interior = interior_collocation_points(max(2, config.grid_points - 2))
-    boundary = _channel_boundary_coordinates(config.grid_points)
+    boundary = boundary_collocation_points(max(2, config.grid_points // 2))
     weights = {
         "continuity": 1.0,
         "x_momentum": 1.0,
         "y_momentum": 1.0,
-        "boundary": 10.0,
+        "inlet": 10.0,
+        "outlet": 10.0,
+        "wall": 10.0,
     }
     history = _train_with_history(
         model,
@@ -485,7 +494,6 @@ def _run_poiseuille_vector_experiment(
             residual_builder,
             interior,
             boundary,
-            viscosity=config.viscosity,
             peak_velocity=config.peak_velocity,
         ),
         weights,
@@ -494,22 +502,18 @@ def _run_poiseuille_vector_experiment(
     coordinates = _grid_coordinates(config.grid_points)
     autograd_coordinates = coordinates.detach().clone().requires_grad_(True)
     predicted = model(autograd_coordinates)
-    reference_fields = poiseuille_channel_solution(
-        autograd_coordinates,
-        viscosity=config.viscosity,
-        peak_velocity=config.peak_velocity,
+    reference_fields = _shared_patch_vector_reference(
+        config.grid_points,
+        config.darcy_reference_iterations,
     )
     residuals = residual_builder(predicted, autograd_coordinates)
     residual_np = np.sqrt(
         sum(value.detach().numpy() ** 2 for value in residuals.values())
     )
     predicted_velocity = torch.cat((predicted["u"], predicted["v"]), dim=1).detach().numpy()
-    reference_velocity = torch.cat(
-        (reference_fields["u"], reference_fields["v"]),
-        dim=1,
-    ).detach().numpy()
+    reference_velocity = reference_fields["velocity"]
     predicted_pressure = predicted["pressure"].detach().numpy()
-    reference_pressure = reference_fields["pressure"].detach().numpy()
+    reference_pressure = reference_fields["pressure"]
     metrics = {
         "pressure_l2": _pressure_l2(predicted_pressure, reference_pressure),
         "velocity_l2": _velocity_l2(predicted_velocity, reference_velocity),
@@ -527,8 +531,8 @@ def _run_poiseuille_vector_experiment(
         predicted_u=predicted["u"].detach().numpy(),
         predicted_v=predicted["v"].detach().numpy(),
         predicted_pressure=predicted_pressure,
-        reference_u=reference_fields["u"].detach().numpy(),
-        reference_v=reference_fields["v"].detach().numpy(),
+        reference_u=reference_fields["u"],
+        reference_v=reference_fields["v"],
         reference_pressure=reference_pressure,
         residual=residual_np,
     )
@@ -556,12 +560,12 @@ def _run_poiseuille_vector_experiment(
 def run_poiseuille_navier_stokes_experiment(
     config: ExperimentConfig | None = None,
 ) -> ExperimentResult:
-    """Run the Poiseuille/Navier-Stokes PINN/reference vertical-slice experiment."""
+    """Run the Navier-Stokes PINN/reference vertical-slice experiment."""
 
     active = ExperimentConfig() if config is None else config
-    return _run_poiseuille_vector_experiment(
+    return _run_shared_patch_vector_experiment(
         model_name="navier_stokes",
-        reference="poiseuille_channel_reference",
+        reference="shared_patch_unit_square_reference",
         config=active,
         residual_builder=lambda outputs, coordinates: navier_stokes_residuals(
             outputs["u"],
@@ -574,12 +578,12 @@ def run_poiseuille_navier_stokes_experiment(
 
 
 def run_stokes_experiment(config: ExperimentConfig | None = None) -> ExperimentResult:
-    """Run the Stokes extension against the Poiseuille channel reference."""
+    """Run the Stokes extension against the shared unit-square patch reference."""
 
     active = ExperimentConfig() if config is None else config
-    return _run_poiseuille_vector_experiment(
+    return _run_shared_patch_vector_experiment(
         model_name="stokes",
-        reference="poiseuille_channel_reference",
+        reference="shared_patch_unit_square_reference",
         config=active,
         residual_builder=lambda outputs, coordinates: stokes_residuals(
             outputs["u"],
@@ -592,7 +596,7 @@ def run_stokes_experiment(config: ExperimentConfig | None = None) -> ExperimentR
 
 
 def run_oseen_experiment(config: ExperimentConfig | None = None) -> ExperimentResult:
-    """Run the Oseen extension against the Poiseuille channel reference."""
+    """Run the Oseen extension against the shared unit-square patch reference."""
 
     active = ExperimentConfig() if config is None else config
 
@@ -614,9 +618,9 @@ def run_oseen_experiment(config: ExperimentConfig | None = None) -> ExperimentRe
             viscosity=active.viscosity,
         )
 
-    return _run_poiseuille_vector_experiment(
+    return _run_shared_patch_vector_experiment(
         model_name="oseen",
-        reference="poiseuille_channel_reference",
+        reference="shared_patch_unit_square_reference",
         config=active,
         residual_builder=residual_builder,
     )

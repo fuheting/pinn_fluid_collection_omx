@@ -34,7 +34,7 @@ Explicitly not completed:
 | 6 | Documentation consolidation and cleanup across implemented models | Smoke benchmark summary complete |
 | 7 | Analytic Poiseuille Navier-Stokes benchmark | Residual validation complete |
 | 8 | Experiment data schema and component-history recording | Complete |
-| 9 | CFD-backed Darcy and Poiseuille/Navier-Stokes vertical slice | Complete |
+| 9 | CFD-backed Darcy and shared-patch Navier-Stokes vertical slice | Complete |
 | 10 | Stokes/Oseen experiment extension and consolidated report | Complete |
 | 11 | Result-procurement runner and manifest | Complete |
 | 12 | Figure-generation utilities for saved experiment artifacts | Complete |
@@ -228,7 +228,7 @@ Remaining:
 
 - Keep the schema small until broader research runs show a concrete need for richer metadata.
 
-## Phase 9: Darcy And Poiseuille/Navier-Stokes Vertical Slice
+## Phase 9: Darcy And Shared-Patch Navier-Stokes Vertical Slice
 
 Status: complete for the lightweight deterministic vertical slice.
 
@@ -236,7 +236,7 @@ Completed in this pass:
 
 - Added a deterministic in-repo finite-difference Laplace reference for the shared Darcy pressure setup.
 - Added Darcy experiment orchestration that saves predicted pressure, reference pressure, predicted/reference velocities, residual fields, objective history, component histories, plots, and finite metrics.
-- Added Poiseuille/Navier-Stokes experiment orchestration that trains a small velocity-pressure field against the channel reference while recording continuity, x-momentum, y-momentum, and boundary objectives.
+- Added Navier-Stokes experiment orchestration that trains a small velocity-pressure field on the shared Darcy unit-square patch geometry while recording continuity, x-momentum, y-momentum, inlet, outlet, and wall objectives.
 - Added tests that assert decreasing histories, finite metrics, and saved numeric/plot artifacts for both vertical-slice models.
 
 Remaining:
@@ -249,7 +249,7 @@ Status: complete for the first consolidated experiment pass.
 
 Completed in this pass:
 
-- Added Stokes and Oseen experiment runs against the same Poiseuille channel reference used by the Navier-Stokes vertical slice.
+- Added Stokes and Oseen experiment runs against the same shared-patch unit-square reference used by the Navier-Stokes vertical slice.
 - Added `run_all_experiments(...)` to run Darcy, Stokes, Oseen, and Navier-Stokes in phase order.
 - Added consolidated JSON and Markdown cross-model reports with objective and field/residual metrics.
 - Added tests for ordered cross-model execution, decreasing histories, finite metrics, and report artifacts.
@@ -270,7 +270,7 @@ Current research objective:
 Deep-interview decisions to preserve:
 
 - Use CFD-backed references, but keep the first pass lightweight, deterministic, and in-repo.
-- Build a vertical slice first for Darcy and Poiseuille/Navier-Stokes rather than all models at once.
+- Build a vertical slice first for Darcy and Navier-Stokes rather than all models at once.
 - Save reproducible numeric artifacts plus plots.
 - Use simple deterministic grids and lightweight local runs.
 - Let the implementing agent choose grid sizes, training steps, file formats, and plot layouts when documented and lightweight.
@@ -279,7 +279,7 @@ Deep-interview decisions to preserve:
 Completed phase order:
 
 1. Phase 8: experiment result schema and component-wise training history capture.
-2. Phase 9: Darcy and Poiseuille/Navier-Stokes CFD-backed vertical-slice experiments.
+2. Phase 9: Darcy and shared-patch Navier-Stokes CFD-backed vertical-slice experiments.
 3. Phase 10: Stokes/Oseen extension and consolidated cross-model report.
 4. Phase 11: result-procurement runner and manifest for staged local runs.
 
@@ -306,10 +306,13 @@ Completed in this pass:
 
 - Added `pinn_fluid.figures.generate_figure_bundle(...)` for standalone figure generation from saved experiment output directories.
 - Added `python -m pinn_fluid.figures <output_dir>` as a narrow CLI surface for local figure procurement.
-- Generated per-model field panels from `fields.npz`: Darcy pressure, velocity magnitude, pressure error, and residual magnitude; Stokes/Oseen/Navier-Stokes velocity components, speed, pressure, references, and residual magnitude.
+- Generated per-model field panels from `fields.npz`: Darcy pressure and speed rows, and Stokes/Oseen/Navier-Stokes `u`, `v`, and pressure rows, each arranged under predicted, actual, and residual columns.
 - Generated per-model convergence panels from `history.json` with the total objective and all recorded component losses.
-- Added titled separate scalar images for Stokes/Oseen/Navier-Stokes predicted, actual, and residual/error `u`, `v`, and pressure fields.
-- Added the `turbo` colormap, numeric min/mid/max colorbar values, convergence axes, titled convergence legends, and matching manifest metadata.
+- Added titled separate scalar images for Stokes/Oseen/Navier-Stokes predicted, actual, and residual/error `u`, `v`, pressure, speed, and residual-magnitude fields.
+- Added the `turbo` colormap, numeric min/mid/max colorbar values, field-panel layout metadata, convergence axes, titled convergence legends, and matching manifest metadata.
+- Added red shared-inlet and blue shared-outlet overlays to flow-field panels and separate scalar field images, with marker metadata in `figure_manifest.json`.
+- Moved field-panel predicted/actual/residual column labels to the bottom, increased and bolded row/column labels, and separated fallback colorbar labels from tick values.
+- Hardened the dependency-free PNG fallback so regenerated figures still show titles, axes, colorbars, and convergence legends when `matplotlib` is unavailable.
 - Wrote `figures/figure_manifest.json` with the generated panel paths.
 - Added tests that first failed on the missing `pinn_fluid.figures` module, then verified Darcy and velocity-pressure panels against small synthetic `fields.npz` and `history.json` fixtures.
 
@@ -367,7 +370,7 @@ Completed in this pass:
 - Added a concrete paper-demo figure inventory for every required field and convergence panel.
 - Listed the numeric/report artifact locations for `run_manifest.json`, `figure_manifest.json`, cross-model reports, `fields.npz`, `history.json`, and `metrics.json`.
 - Documented the separate predicted, actual, and residual/error scalar images for `u`, `v`, and pressure.
-- Documented that flow figures use `turbo` colorbars with values and that convergence figures include labeled axes plus a loss-component legend.
+- Documented that flow figures use `turbo` colorbars with values, highlight the shared inlet/outlet patches, and that convergence figures include labeled axes plus a loss-component legend.
 - Recorded limitations that keep the moderate demo tier from being interpreted as final physical accuracy or model-ranking evidence.
 - Preserved the policy that generated outputs under `data/` remain ignored and uncommitted.
 
@@ -383,9 +386,10 @@ Final paper-demo figure inventory:
 Known limitations from the actual runs:
 
 - The paper-demo run used one seed, one grid size, and one training budget.
-- The Darcy reference and Poiseuille channel reference are lightweight in-repo references, not external CFD validation datasets.
+- The Darcy and vector-flow shared-patch references are lightweight in-repo references, not external CFD validation datasets.
+- Stokes, Oseen, and Navier-Stokes now use the same top-left inlet and bottom-right outlet geometry as Darcy; the vector-flow reference remains a paper-demo procurement reference rather than a high-fidelity CFD solve.
 - The moderate demo tier is suitable for paper-draft artifact procurement and workflow validation, not final accuracy claims.
-- Cross-model values should not be used to rank PINN effectiveness because the Darcy and channel-flow tasks are not equivalent benchmarks.
+- Cross-model values should not be used to rank PINN effectiveness because the references are lightweight paper-demo procurement targets.
 - Generated `.npz`, `.json`, and `.png` outputs remain local under ignored `data/` directories.
 
 ## Continuing Guidance

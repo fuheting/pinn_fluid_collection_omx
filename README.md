@@ -26,7 +26,7 @@ The current phase documents the completed local sanity and paper-demo result-pro
 | 6 | Documentation, cleanup, and consolidated test coverage | Smoke benchmark summary complete |
 | 7 | Analytic Poiseuille Navier-Stokes benchmark | Residual validation complete |
 | 8 | Experiment data schema and component-history recording | Complete |
-| 9 | CFD-backed Darcy and Poiseuille/Navier-Stokes vertical slice | Complete |
+| 9 | CFD-backed Darcy and shared-patch Navier-Stokes vertical slice | Complete |
 | 10 | Stokes/Oseen experiment extension and consolidated report | Complete |
 | 11 | Narrow result-procurement runner and manifest | Complete |
 | 12 | Figure-generation utilities for saved experiment artifacts | Complete |
@@ -247,8 +247,9 @@ Phases 8-10 add `pinn_fluid.experiments` for lightweight local comparisons as ph
 - `TrainingHistory` records total objective values and per-loss-component histories for every optimizer iteration.
 - `ExperimentResult` stores model name, reference source, grid shape, metrics, and artifact paths.
 - `run_darcy_experiment(...)` trains a small Darcy pressure field and compares it to an in-repo finite-difference Laplace reference on a deterministic grid.
-- `run_poiseuille_navier_stokes_experiment(...)` trains a small velocity-pressure field against a horizontal Poiseuille channel reference while enforcing Navier-Stokes residual components.
-- `run_stokes_experiment(...)` and `run_oseen_experiment(...)` reuse the same channel reference to extend the comparison to lower-complexity velocity-pressure physics.
+- `run_poiseuille_navier_stokes_experiment(...)` keeps the historical API name but now trains a small velocity-pressure field on the same shared unit-square patch geometry as Darcy: top-left inlet, bottom-right outlet, and walls.
+- `run_stokes_experiment(...)` and `run_oseen_experiment(...)` use the same shared-patch boundary setup so the vector-flow comparisons are no longer horizontal channel-flow artifacts.
+- The vector experiments save reference `u`, `v`, and pressure fields from the shared-patch finite-difference pressure/velocity reference used to make the Darcy geometry visible in all model panels.
 - `run_all_experiments(...)` runs Darcy, Stokes, Oseen, and Navier-Stokes in order and writes a consolidated JSON and Markdown report.
 
 Each experiment writes reproducible numeric artifacts under the configured output directory:
@@ -292,13 +293,15 @@ PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
 
 Generated Phase 12 figures:
 
-- Darcy field panel: predicted pressure, reference pressure, pressure error, predicted velocity magnitude, reference velocity magnitude, and residual magnitude.
-- Stokes/Oseen/Navier-Stokes field panels: predicted `u`, `v`, speed, and pressure; reference `u`, `v`, speed, and pressure; residual magnitude.
-- Separate scalar field images for Stokes/Oseen/Navier-Stokes predicted, actual, and residual/error `u`, `v`, and pressure fields.
+- Darcy field panel: row-labeled pressure and speed comparisons with predicted, actual, and residual columns.
+- Stokes/Oseen/Navier-Stokes field panels: row-labeled `u`, `v`, and pressure comparisons with predicted, actual, and residual columns.
+- Field comparison panels place bold row labels on the left and bold predicted/actual/residual column labels below the columns.
+- Separate scalar field images for Stokes/Oseen/Navier-Stokes predicted, actual, and residual/error `u`, `v`, pressure, speed, and residual-magnitude fields.
 - Per-model convergence panels: total objective and every recorded component loss versus iteration.
-- Flow-field figures use the `turbo` colormap and include value colorbars with min/mid/max tick labels.
+- Flow-field figures use the `turbo` colormap, include value colorbars with min/mid/max tick labels, and mark the shared inlet in red and outlet in blue.
 - Convergence figures include axis labels, log-scaled objective values, and a titled legend for loss components.
-- Figure manifests include panel titles, convergence legend entries, convergence axes, colormap names, and scalar colorbar tick values.
+- When `matplotlib` is unavailable, the dependency-free PNG fallback still draws readable titles, axes, colorbars, and convergence legends.
+- Figure manifests include field-panel row/column layout, inlet/outlet marker metadata, panel titles, convergence legend entries, convergence axes, colormap names, and scalar colorbar tick values.
 
 ## Phase 13 Local Runs
 
@@ -360,7 +363,7 @@ Each root contains `run_manifest.json`, per-model `fields.npz`, `history.json`, 
 
 ## Phase 14 Figure Inventory And Limits
 
-The Phase 13 paper-demo bundle in `data/experiments_paper_demo/` satisfies the minimum paper-demo figure inventory without committing generated files. The same file pattern exists for `data/experiments_sanity/`. Regenerate the bundle with `PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo` after changing figure code. Flow-field figures use `turbo` with numeric colorbar values; convergence figures label the iteration and log-objective axes and include a titled loss-component legend.
+The Phase 13 paper-demo bundle in `data/experiments_paper_demo/` satisfies the minimum paper-demo figure inventory without committing generated files. The same file pattern exists for `data/experiments_sanity/`. Regenerate the bundle with `PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo` after changing figure code. Flow-field comparison panels use predicted/actual/residual columns with bold bottom column labels and bold left row labels; flow-field figures use `turbo` with numeric colorbar values and red/blue inlet/outlet boundary markers. Convergence figures label the iteration and log-objective axes and include a titled loss-component legend. The fallback renderer preserves those visual annotations even in environments where `matplotlib` is not installed, with colorbar labels separated from tick values.
 
 Paper-demo figure inventory:
 
@@ -403,9 +406,9 @@ Minimum paper-demo figure bundle contents:
 Known limitations:
 
 - The paper-demo tier is laptop-moderate procurement evidence, not a final convergence study.
-- The references are lightweight in-repo finite-difference Darcy and analytic Poiseuille channel fields, not external CFD validation data.
-- Stokes, Oseen, and Navier-Stokes use the same channel reference, so the table should not be read as a general model ranking.
-- Darcy and channel-flow velocity-pressure metrics are not physically equivalent benchmarks.
+- The references are lightweight in-repo shared-patch finite-difference fields, not external CFD validation data.
+- Stokes, Oseen, and Navier-Stokes now use the same top-left inlet and bottom-right outlet geometry as Darcy, but their shared-patch vector reference remains a paper-demo procurement reference rather than a high-fidelity CFD solve.
+- Cross-model velocity-pressure metrics should not be read as a general model ranking.
 - The run used one seed and one training budget; no uncertainty, sensitivity, or hyperparameter sweep is reported.
 - Generated `.npz`, `.json`, and `.png` artifacts are intentionally ignored under `data/` and are not part of the committed source tree.
 
