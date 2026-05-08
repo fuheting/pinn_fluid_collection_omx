@@ -295,12 +295,12 @@ PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
 
 Generated Phase 12 figures:
 
-- Darcy field panel: row-labeled pressure and speed comparisons with predicted, actual, and residual columns.
+- Darcy field panel: row-labeled pressure, `u`, and `v` comparisons with predicted, actual, and residual columns.
 - Stokes/Oseen/Navier-Stokes field panels: row-labeled `u`, `v`, and pressure comparisons with predicted, actual, and residual columns.
 - Field comparison panels place bold row labels on the left and bold predicted/actual/residual column labels below the columns.
 - Separate scalar field images for Stokes/Oseen/Navier-Stokes predicted, actual, and residual/error `u`, `v`, pressure, speed, and residual-magnitude fields.
 - Per-model convergence panels: total objective and every recorded component loss versus iteration.
-- Flow-field figures use the `turbo` colormap, include value colorbars with min/mid/max tick labels, and mark the shared inlet in red and outlet in blue just outside the unit-square domain so the field values remain unobscured.
+- Flow-field figures use the `turbo` colormap, include value colorbars with min/mid/max tick labels, and mark the shared inlet in red just above the top-left horizontal opening and the shared outlet in blue just below the bottom-right horizontal opening so the field values remain unobscured.
 - Predicted and actual fields for the same variable share the same color range; residual/error panels keep their own residual range.
 - Per-model pressure-velocity quiver diagnostics overlay velocity arrows on pressure contours so the plotted flow direction can be checked against the red inlet and blue outlet.
 - Convergence figures include axis labels, log-scaled objective values, and a titled legend for loss components.
@@ -388,7 +388,7 @@ Each root contains `run_manifest.json`, per-model `fields.npz`, `history.json`, 
 
 ## Phase 14 Figure Inventory And Limits
 
-The Phase 13 paper-demo bundle in `data/experiments_paper_demo/` satisfies the minimum paper-demo figure inventory without committing generated files. The same file pattern exists for `data/experiments_sanity/`. Regenerate the bundle with `PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo` after changing figure code. Flow-field comparison panels use predicted/actual/residual columns with bold bottom column labels and bold left row labels; flow-field figures use `turbo` with numeric colorbar values, shared predicted/actual color limits per variable, and red/blue inlet/outlet boundary markers placed just outside the square. Convergence figures label the iteration and log-objective axes and include a titled loss-component legend. Figure generation requires `matplotlib>=3.8`; without it, Python raises the normal import error. Pressure-velocity quiver panels are generated for every model to show whether velocity arrows move from the red inlet toward the blue outlet.
+The Phase 13 paper-demo bundle in `data/experiments_paper_demo/` satisfies the minimum paper-demo figure inventory without committing generated files. The same file pattern exists for `data/experiments_sanity/`. Regenerate the bundle with `PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo` after changing figure code. Flow-field comparison panels use predicted/actual/residual columns with bold bottom column labels and bold left row labels; Darcy now uses pressure, `u`, and `v` rows rather than velocity magnitude. Flow-field figures use `turbo` with numeric colorbar values, shared predicted/actual color limits per variable, and red/blue inlet/outlet boundary markers placed just outside the top and bottom horizontal openings. Convergence figures label the iteration and log-objective axes and include a titled loss-component legend. Figure generation requires `matplotlib>=3.8`; without it, Python raises the normal import error. Pressure-velocity quiver panels are generated for every model to show whether velocity arrows move from the red inlet toward the blue outlet.
 
 Paper-demo figure inventory:
 
@@ -427,7 +427,7 @@ Separate paper-demo scalar images:
 
 Minimum paper-demo figure bundle contents:
 
-- Darcy panel: predicted pressure, reference pressure, pressure error, predicted velocity magnitude, reference velocity magnitude, and residual magnitude.
+- Darcy panel: predicted pressure, reference pressure, pressure error, predicted and reference `u`, predicted and reference `v`, and component-wise velocity errors.
 - Stokes/Oseen/Navier-Stokes panels: predicted `u`, `v`, speed, and pressure; reference `u`, `v`, speed, and pressure; scalar residual magnitude.
 - Convergence panels: total objective and every recorded loss component versus iteration for each model.
 - Cross-model table: final objective, velocity L2, pressure L2, and residual RMS.

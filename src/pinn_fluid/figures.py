@@ -238,15 +238,18 @@ def _history_legend(history: dict[str, object]) -> list[str]:
 def _darcy_panels(fields: np.lib.npyio.NpzFile) -> list[tuple[str, np.ndarray]]:
     predicted_pressure = _scalar(fields["predicted_pressure"])
     reference_pressure = _scalar(fields["reference_pressure"])
-    predicted_speed = _magnitude(fields["predicted_velocity"])
-    reference_speed = _magnitude(fields["reference_velocity"])
+    predicted_velocity = np.asarray(fields["predicted_velocity"], dtype=np.float64)
+    reference_velocity = np.asarray(fields["reference_velocity"], dtype=np.float64)
     return [
         ("pressure predicted", predicted_pressure),
         ("pressure actual", reference_pressure),
         ("pressure residual", np.abs(predicted_pressure - reference_pressure)),
-        ("speed predicted", predicted_speed),
-        ("speed actual", reference_speed),
-        ("speed residual", np.abs(predicted_speed - reference_speed)),
+        ("u predicted", _scalar(predicted_velocity[:, 0])),
+        ("u actual", _scalar(reference_velocity[:, 0])),
+        ("u residual", np.abs(_scalar(predicted_velocity[:, 0]) - _scalar(reference_velocity[:, 0]))),
+        ("v predicted", _scalar(predicted_velocity[:, 1])),
+        ("v actual", _scalar(reference_velocity[:, 1])),
+        ("v residual", np.abs(_scalar(predicted_velocity[:, 1]) - _scalar(reference_velocity[:, 1]))),
     ]
 
 
@@ -273,12 +276,22 @@ def _velocity_pressure_panels(fields: np.lib.npyio.NpzFile) -> list[tuple[str, n
 def _darcy_separate_images(fields: np.lib.npyio.NpzFile) -> dict[str, tuple[str, np.ndarray]]:
     predicted_pressure = _scalar(fields["predicted_pressure"])
     reference_pressure = _scalar(fields["reference_pressure"])
+    predicted_velocity = np.asarray(fields["predicted_velocity"], dtype=np.float64)
+    reference_velocity = np.asarray(fields["reference_velocity"], dtype=np.float64)
+    predicted_u = _scalar(predicted_velocity[:, 0])
+    predicted_v = _scalar(predicted_velocity[:, 1])
+    actual_u = _scalar(reference_velocity[:, 0])
+    actual_v = _scalar(reference_velocity[:, 1])
     return {
         "predicted_p": ("Darcy predicted pressure", predicted_pressure),
         "actual_p": ("Darcy actual pressure", reference_pressure),
         "residual_p": ("Darcy pressure residual", np.abs(predicted_pressure - reference_pressure)),
-        "predicted_speed": ("Darcy predicted velocity magnitude", _magnitude(fields["predicted_velocity"])),
-        "actual_speed": ("Darcy actual velocity magnitude", _magnitude(fields["reference_velocity"])),
+        "predicted_u": ("Darcy predicted u flow field", predicted_u),
+        "actual_u": ("Darcy actual u flow field", actual_u),
+        "residual_u": ("Darcy residual u flow field", np.abs(predicted_u - actual_u)),
+        "predicted_v": ("Darcy predicted v flow field", predicted_v),
+        "actual_v": ("Darcy actual v flow field", actual_v),
+        "residual_v": ("Darcy residual v flow field", np.abs(predicted_v - actual_v)),
         "residual_magnitude": ("Darcy equation residual magnitude", np.abs(_scalar(fields["residual"]))),
     }
 
@@ -354,7 +367,7 @@ def _model_field_panels(model: str, fields: np.lib.npyio.NpzFile) -> tuple[list[
 
 def _model_field_layout(model: str) -> dict[str, list[str]]:
     if model == "darcy":
-        return {"columns": list(COMPARISON_COLUMNS), "rows": ["pressure", "speed"]}
+        return {"columns": list(COMPARISON_COLUMNS), "rows": ["pressure", "u", "v"]}
     return {"columns": list(COMPARISON_COLUMNS), "rows": ["u", "v", "pressure"]}
 
 

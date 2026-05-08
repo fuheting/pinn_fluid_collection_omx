@@ -109,7 +109,9 @@ def test_scalar_field_image_places_boundary_markers_outside_domain(monkeypatch, 
     blue_calls = [(args, kwargs) for args, kwargs in calls if kwargs.get("color") == "blue"]
     assert red_calls
     assert blue_calls
+    assert red_calls[0][0][0] == [0.0, 0.25]
     assert all(y > 1.0 for y in red_calls[0][0][1])
+    assert blue_calls[0][0][0] == [0.75, 1.0]
     assert all(y < 0.0 for y in blue_calls[0][0][1])
     assert red_calls[0][1]["clip_on"] is False
     assert blue_calls[0][1]["clip_on"] is False
@@ -146,7 +148,7 @@ def test_generate_figure_bundle_creates_darcy_field_and_convergence_panels(tmp_p
     assert darcy_entry["convergence_panel"] == "figures/darcy_convergence.png"
     assert darcy_entry["field_panel_layout"] == {
         "columns": ["predicted", "actual", "residual"],
-        "rows": ["pressure", "speed"],
+        "rows": ["pressure", "u", "v"],
     }
     assert darcy_entry["boundary_markers"] == {
         "inlet": {
@@ -166,11 +168,16 @@ def test_generate_figure_bundle_creates_darcy_field_and_convergence_panels(tmp_p
         "pressure predicted",
         "pressure actual",
         "pressure residual",
-        "speed predicted",
-        "speed actual",
-        "speed residual",
+        "u predicted",
+        "u actual",
+        "u residual",
+        "v predicted",
+        "v actual",
+        "v residual",
     ]
     assert darcy_entry["field_panel_color_limits"]["pressure"]["predicted_actual"] == [0.0, 1.0]
+    assert darcy_entry["field_panel_color_limits"]["u"]["predicted_actual"] == [0.0, 1.0]
+    assert darcy_entry["field_panel_color_limits"]["v"]["predicted_actual"] == [0.0, 1.0]
     assert darcy_entry["pressure_velocity_quiver"] == "figures/darcy_pressure_velocity_quiver.png"
     _assert_png(tmp_path / darcy_entry["field_panel"])
     _assert_png(tmp_path / darcy_entry["convergence_panel"])
@@ -288,3 +295,48 @@ def test_generate_figure_bundle_creates_separate_predicted_actual_and_residual_i
     assert separate["actual_u"]["color_limits"] == [0.0, 1.0]
     assert separate["predicted_p"]["color_limits"] == [0.0, 2.0]
     assert separate["actual_p"]["color_limits"] == [0.0, 2.0]
+
+
+def test_generate_figure_bundle_creates_darcy_velocity_component_images(tmp_path):
+    model_dir = tmp_path / "darcy"
+    model_dir.mkdir()
+    grid_points = 3
+    coordinates = _coordinates(grid_points)
+    predicted_pressure = np.linspace(0.0, 1.0, grid_points * grid_points).reshape(-1, 1)
+    reference_pressure = np.flipud(predicted_pressure)
+    predicted_velocity = np.column_stack(
+        (predicted_pressure.reshape(-1), 1.0 - predicted_pressure.reshape(-1))
+    )
+    reference_velocity = predicted_velocity * 0.5
+    residual = np.full((grid_points * grid_points, 1), 0.25)
+    np.savez(
+        model_dir / "fields.npz",
+        coordinates=coordinates,
+        predicted_pressure=predicted_pressure,
+        reference_pressure=reference_pressure,
+        predicted_velocity=predicted_velocity,
+        reference_velocity=reference_velocity,
+        residual=residual,
+    )
+    _write_history(model_dir / "history.json", boundary_name="wall")
+
+    manifest = generate_figure_bundle(tmp_path)
+
+    separate = manifest["models"][0]["separate_field_images"]
+    expected_keys = {
+        "predicted_p",
+        "actual_p",
+        "residual_p",
+        "predicted_u",
+        "actual_u",
+        "residual_u",
+        "predicted_v",
+        "actual_v",
+        "residual_v",
+        "residual_magnitude",
+    }
+    assert set(separate) == expected_keys
+    assert separate["predicted_u"]["color_limits"] == [0.0, 1.0]
+    assert separate["actual_u"]["color_limits"] == [0.0, 1.0]
+    assert separate["predicted_v"]["color_limits"] == [0.0, 1.0]
+    assert separate["actual_v"]["color_limits"] == [0.0, 1.0]

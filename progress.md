@@ -306,12 +306,13 @@ Completed in this pass:
 
 - Added `pinn_fluid.figures.generate_figure_bundle(...)` for standalone figure generation from saved experiment output directories.
 - Added `python -m pinn_fluid.figures <output_dir>` as a narrow CLI surface for local figure procurement.
-- Generated per-model field panels from `fields.npz`: Darcy pressure and speed rows, and Stokes/Oseen/Navier-Stokes `u`, `v`, and pressure rows, each arranged under predicted, actual, and residual columns.
+- Generated per-model field panels from `fields.npz`: Darcy pressure, `u`, and `v` rows, and Stokes/Oseen/Navier-Stokes `u`, `v`, and pressure rows, each arranged under predicted, actual, and residual columns.
 - Generated per-model convergence panels from `history.json` with the total objective and all recorded component losses.
 - Added titled separate scalar images for Stokes/Oseen/Navier-Stokes predicted, actual, and residual/error `u`, `v`, pressure, speed, and residual-magnitude fields.
 - Added the `turbo` colormap, numeric min/mid/max colorbar values, field-panel layout metadata, convergence axes, titled convergence legends, and matching manifest metadata.
 - Added red shared-inlet and blue shared-outlet markers to flow-field panels and separate scalar field images, with marker metadata in `figure_manifest.json`.
-- Moved the red/blue inlet/outlet marker lines just outside the unit-square domain so they no longer overlay the rendered flow field.
+- Moved the red/blue inlet/outlet marker lines just outside the top/bottom horizontal unit-square openings so they no longer overlay the rendered flow field while matching the actual boundary orientation.
+- Replaced Darcy speed comparison panels and separate speed images with Darcy `u` and `v` velocity-component comparison panels and separate component images.
 - Moved field-panel predicted/actual/residual column labels to the bottom, increased and bolded row/column labels, and separated colorbar labels from tick values.
 - Standardized field-panel and separate-image color limits so predicted and actual fields for the same variable share the same value range while residual/error fields keep a residual-specific range.
 - Added per-model pressure-velocity quiver diagnostics that overlay velocity arrows on pressure contours and preserve red/blue inlet/outlet markers.
