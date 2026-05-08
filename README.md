@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-The current phase adds a Navier-Stokes-specific manufactured actual field so every active model now has a model-specific reference source. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, summary metrics, and explicit reference metadata, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, and a documented inventory of the locally procured paper-demo bundle.
+The current phase completed a clean comparison run using model-specific actual fields. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, summary metrics, and explicit reference metadata, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, and a documented inventory of the locally procured model-specific paper-demo bundle.
 
 ## Planned Phases
 
@@ -37,7 +37,7 @@ The current phase adds a Navier-Stokes-specific manufactured actual field so eve
 | 17 | Stokes model-specific manufactured ground truth | Complete |
 | 18 | Oseen model-specific ground truth | Complete |
 | 19 | Navier-Stokes model-specific ground truth | Complete |
-| 20 | True performance comparison run with model-specific actual fields | Planned |
+| 20 | True performance comparison run with model-specific actual fields | Complete |
 | 21 | Dedicated external CFD/scientific-computing reference solve with OpenFOAM, FEniCS, FiPy, or similar | Planned |
 
 ## Repository Layout
@@ -285,7 +285,7 @@ The first-pass success criterion is intentionally modest: histories should decre
 
 ## Result Procurement Handoff
 
-Phase 11 adds `pinn_fluid.result_procurement.run_result_procurement(...)` and a `python -m pinn_fluid.result_procurement` entry point. The runner wraps the existing all-model experiment API, writes results under the configured output directory, and saves `run_manifest.json` with the git commit, config values, per-model output directories, reference metadata, artifact paths, metric summaries, finite-metric flags, and history-reduction flags.
+Phase 11 adds `pinn_fluid.result_procurement.run_result_procurement(...)` and a `python -m pinn_fluid.result_procurement` entry point. The runner wraps the existing all-model experiment API, writes results under the configured output directory, and saves `run_manifest.json` with the git commit, config values, per-model output directories, reference metadata, a top-level `reference_generators` summary, artifact paths, metric summaries, finite-metric flags, and history-reduction flags.
 
 Example sanity procurement command:
 
@@ -629,6 +629,81 @@ git diff --check
 PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
 PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
 ```
+
+## Phase 20 Model-Specific Comparison Run
+
+Phase 20 ran clean local comparison tiers after Darcy, Stokes, Oseen, and Navier-Stokes all had model-specific reference fields. Generated artifacts were written under ignored `data/` directories and were not committed.
+
+Reference generators recorded in both Phase 20 manifests:
+
+| Model | Reference generator | Reference kind |
+| --- | --- | --- |
+| Darcy | `fd_darcy_reference` | finite-difference |
+| Stokes | `stokes_streamfunction_reference` | manufactured |
+| Oseen | `oseen_streamfunction_reference` | manufactured |
+| Navier-Stokes | `navier_stokes_streamfunction_reference` | manufactured |
+
+Sanity tier command:
+
+```bash
+PYTHONPATH=src python -m pinn_fluid.result_procurement \
+  --output-dir data/experiments_sanity \
+  --grid-points 9 \
+  --training-steps 80 \
+  --hidden-width 12 \
+  --hidden-layers 1 \
+  --learning-rate 0.02 \
+  --seed 0 \
+  --viscosity 0.25 \
+  --peak-velocity 1.0 \
+  --darcy-reference-iterations 400 \
+  --git-commit phase20-local-model-specific-references
+PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
+```
+
+Paper-demo tier command:
+
+```bash
+PYTHONPATH=src python -m pinn_fluid.result_procurement \
+  --output-dir data/experiments_paper_demo \
+  --grid-points 31 \
+  --training-steps 800 \
+  --hidden-width 24 \
+  --hidden-layers 2 \
+  --learning-rate 0.01 \
+  --seed 0 \
+  --viscosity 0.25 \
+  --peak-velocity 1.0 \
+  --darcy-reference-iterations 1200 \
+  --git-commit phase20-local-model-specific-references
+PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo
+```
+
+Both manifests reported `all_metrics_finite=true` and `all_histories_decreased=true`.
+
+Paper-demo metrics:
+
+| Model | Initial objective | Final objective | Velocity L2 | Pressure L2 | Residual RMS | Reference continuity RMS | Reference momentum RMS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Darcy | 10.4557 | 0.119401 | 0.319252 | 0.211299 | 0.118235 | n/a | n/a |
+| Stokes | 7.20939 | 0.35744 | 0.224723 | 0.531488 | 0.442768 | 1.91367e-16 | 11.7339 |
+| Oseen | 7.19069 | 0.374738 | 0.227178 | 0.526716 | 0.467904 | 1.91367e-16 | 12.0635 |
+| Navier-Stokes | 7.21106 | 0.375367 | 0.223985 | 0.556291 | 0.481473 | 1.91367e-16 | 11.7356 |
+
+Generated local artifact roots:
+
+- `data/experiments_sanity/`
+- `data/experiments_paper_demo/`
+
+Each root contains:
+
+- `run_manifest.json` with `reference_generators`, per-model reference metadata, finite-metric flags, and history-reduction flags
+- `figures/figure_manifest.json`
+- `summary/cross_model_report.json`
+- `summary/cross_model_report.md`
+- per-model `fields.npz`, `history.json`, `metrics.json`, raw loss/field plots, field panels, convergence panels, scalar field images, and pressure-velocity quiver diagnostics
+
+Limitations: this is a clean local comparison against lightweight in-repo finite-difference/manufactured references, not an external CFD validation study. The vector references are deterministic manufactured fields for model-specific residual diagnostics; they should not be treated as publication-grade benchmark truth. The run used one seed and one training budget per tier, with no hyperparameter sweep or uncertainty analysis.
 
 ## Phase 21 Dedicated Reference Solver Integration
 

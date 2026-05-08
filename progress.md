@@ -45,7 +45,7 @@ Explicitly not completed:
 | 17 | Stokes model-specific manufactured ground truth | Complete |
 | 18 | Oseen model-specific ground truth | Complete |
 | 19 | Navier-Stokes model-specific ground truth | Complete |
-| 20 | True performance comparison run with model-specific actual fields | Planned |
+| 20 | True performance comparison run with model-specific actual fields | Complete |
 | 21 | Dedicated external CFD/scientific-computing reference solve with OpenFOAM, FEniCS, FiPy, or similar | Planned |
 
 ## Phase 2: Darcy Flow
@@ -678,6 +678,72 @@ python -m pytest tests/test_phase19_navier_stokes_reference.py
 PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
 PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
 ```
+
+## Phase 20: True Performance Comparison Run
+
+Status: complete.
+
+Completed in this pass:
+
+- Added a top-level `reference_generators` summary to result-procurement manifests so each run directly records which reference generator each model used.
+- Added Phase 20 tests for model-specific reference-generator recording, finite/decreasing procurement manifests, required field schemas, and figure-bundle artifact compatibility.
+- Ran the sanity tier under `data/experiments_sanity/` with model-specific references.
+- Regenerated the sanity figure bundle under `data/experiments_sanity/figures/`.
+- Ran the paper-demo tier under `data/experiments_paper_demo/` with model-specific references.
+- Regenerated the paper-demo figure bundle under `data/experiments_paper_demo/figures/`.
+- Confirmed each tier produced `run_manifest.json`, per-model `fields.npz`, `metrics.json`, `history.json`, `summary/cross_model_report.json`, `summary/cross_model_report.md`, `figures/figure_manifest.json`, field panels, convergence panels, scalar field images, and pressure-velocity quiver diagnostics.
+- Left generated `.npz`, `.json`, and `.png` artifacts under ignored `data/` paths; they are not committed.
+
+Reference generators recorded in both Phase 20 manifests:
+
+| Model | Reference generator | Reference kind |
+| --- | --- | --- |
+| Darcy | `fd_darcy_reference` | finite-difference |
+| Stokes | `stokes_streamfunction_reference` | manufactured |
+| Oseen | `oseen_streamfunction_reference` | manufactured |
+| Navier-Stokes | `navier_stokes_streamfunction_reference` | manufactured |
+
+Sanity tier:
+
+- Command: `PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --grid-points 9 --training-steps 80 --hidden-width 12 --hidden-layers 1 --learning-rate 0.02 --seed 0 --viscosity 0.25 --peak-velocity 1.0 --darcy-reference-iterations 400 --git-commit phase20-local-model-specific-references`
+- Figure command: `PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity`
+- Manifest result: `all_metrics_finite=true`, `all_histories_decreased=true`
+
+Paper-demo tier:
+
+- Command: `PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_paper_demo --grid-points 31 --training-steps 800 --hidden-width 24 --hidden-layers 2 --learning-rate 0.01 --seed 0 --viscosity 0.25 --peak-velocity 1.0 --darcy-reference-iterations 1200 --git-commit phase20-local-model-specific-references`
+- Figure command: `PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo`
+- Manifest result: `all_metrics_finite=true`, `all_histories_decreased=true`
+
+Paper-demo metrics:
+
+| Model | Initial objective | Final objective | Velocity L2 | Pressure L2 | Residual RMS | Reference continuity RMS | Reference momentum RMS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Darcy | 10.4557 | 0.119401 | 0.319252 | 0.211299 | 0.118235 | n/a | n/a |
+| Stokes | 7.20939 | 0.35744 | 0.224723 | 0.531488 | 0.442768 | 1.91367e-16 | 11.7339 |
+| Oseen | 7.19069 | 0.374738 | 0.227178 | 0.526716 | 0.467904 | 1.91367e-16 | 12.0635 |
+| Navier-Stokes | 7.21106 | 0.375367 | 0.223985 | 0.556291 | 0.481473 | 1.91367e-16 | 11.7356 |
+
+Generated local outputs:
+
+- `data/experiments_sanity/run_manifest.json`
+- `data/experiments_sanity/figures/figure_manifest.json`
+- `data/experiments_paper_demo/run_manifest.json`
+- `data/experiments_paper_demo/figures/figure_manifest.json`
+- per-model `fields.npz`, `history.json`, `metrics.json`, raw plots, field panels, scalar images, convergence plots, and quiver diagnostics under each ignored output root
+
+Limitations:
+
+- Phase 20 is a clean local comparison against lightweight in-repo finite-difference/manufactured references, not external CFD validation.
+- Vector-flow references are deterministic manufactured fields for model-specific comparison and residual diagnostics, not final physical ground truth.
+- The run used one seed and one training budget per tier; no uncertainty, mesh, grid-size, hyperparameter, or sensitivity study is reported.
+- The `matplotlib` commands emitted the existing `tight_layout` warning from `src/pinn_fluid/figures.py:500`; generated PNGs and figure manifests were still written.
+
+Verification:
+
+- `python -m pytest tests/test_phase20_comparison_run_contracts.py` first failed because `run_manifest.json` did not include a top-level `reference_generators` summary.
+- After implementation, `python -m pytest tests/test_phase20_comparison_run_contracts.py tests/test_phase11_result_procurement.py` passed.
+- Final verification for the phase is `python -m pytest tests/test_phase20_comparison_run_contracts.py`, `python -m pytest`, and `git diff --check`.
 
 ## Planned Phase 21: Dedicated Reference Solver Integration
 

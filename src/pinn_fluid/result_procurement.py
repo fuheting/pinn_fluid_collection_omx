@@ -76,10 +76,15 @@ def _manifest_payload(
 ) -> dict[str, Any]:
     output_dir = Path(config.output_dir)
     result_entries = [_result_payload(result, output_dir) for result in results]
+    reference_generators = {
+        result.model: str(result.reference_metadata["reference_generator_name"])
+        for result in results
+    }
     return {
         "git_commit": git_commit,
         "output_dir": str(output_dir),
         "config": _config_payload(config),
+        "reference_generators": reference_generators,
         "all_metrics_finite": all(entry["metrics_finite"] for entry in result_entries),
         "all_histories_decreased": all(entry["history_decreased"] for entry in result_entries),
         "results": result_entries,
