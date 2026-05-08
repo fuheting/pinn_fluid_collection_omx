@@ -751,10 +751,10 @@ Status: complete for OpenFOAM case generation and sampled-field import.
 
 Solver-selection decision:
 
-- Selected OpenFOAM `simpleFoam` for the dedicated-solver phase, per the user direction to use OpenFOAM.
+- Selected OpenFOAM 13 for the dedicated-solver phase, per the user direction to use OpenFOAM.
 - Did not add Python dependencies.
-- Local environment check found no `blockMesh`, `simpleFoam`, or `foamVersion` executables on `PATH`, and no usual local OpenFOAM installation under `/usr`, `/opt`, or `/home/hfu_nestle`.
-- Implemented the OpenFOAM case writer and sampled-field importer so the phase is testable without committing generated solver outputs or requiring OpenFOAM in CI.
+- Initial local environment check found no `blockMesh`, `simpleFoam`, or `foamVersion` executables on `PATH`; after user-installed OpenFOAM 13, `blockMesh`, `simpleFoam`, and `foamRun` were available.
+- Implemented the OpenFOAM case writer and sampled-field importer so the phase is testable without committing generated solver outputs and CI can still run without OpenFOAM.
 
 Completed:
 
@@ -763,6 +763,8 @@ Completed:
 - Generated an OpenFOAM `simpleFoam` case skeleton with:
   - `0/U`
   - `0/p`
+  - `constant/momentumTransport`
+  - `constant/physicalProperties`
   - `constant/transportProperties`
   - `system/blockMeshDict`
   - `system/controlDict`
@@ -784,6 +786,10 @@ Completed:
   - expected sampled columns
   - the shared coordinate convention
 - Added tests for generated OpenFOAM case files, metadata, coordinate orientation, flattening order, finite imported fields, artifact schema compatibility, and manifest reference-generator recording.
+- After OpenFOAM installation, patched the writer for OpenFOAM 13 compatibility:
+  - added `constant/momentumTransport` and `constant/physicalProperties`
+  - changed sampling from a diagonal `lineFace` set to an explicit `points` set over the full square grid
+- Verified `blockMesh`, `foamRun -solver incompressibleFluid`, `postProcess -func sampleDict`, artifact import, and figure generation on an ignored local case.
 
 Reference generators after Phase 21:
 
@@ -797,20 +803,28 @@ Reproduction commands:
 
 ```bash
 PYTHONPATH=src python -c "from pinn_fluid.dedicated_solvers import OpenFOAMCaseConfig, write_openfoam_shared_domain_case; write_openfoam_shared_domain_case('data/openfoam_phase21/case', OpenFOAMCaseConfig(grid_points=31, viscosity=0.25))"
-cd data/openfoam_phase21/case
-blockMesh
-simpleFoam
-postProcess -func sampleDict -latestTime
-PYTHONPATH=src python -c "from pinn_fluid.dedicated_solvers import run_openfoam_reference_import; run_openfoam_reference_import(output_dir='data/openfoam_phase21/imported', sample_path='data/openfoam_phase21/case/postProcessing/sample/latestTime/sharedDomainGrid_p_U.xy', grid_points=31)"
+blockMesh -case data/openfoam_phase21/case
+foamRun -solver incompressibleFluid -case data/openfoam_phase21/case
+postProcess -func sampleDict -latestTime -case data/openfoam_phase21/case
+PYTHONPATH=src python -c "from pinn_fluid.dedicated_solvers import run_openfoam_reference_import; run_openfoam_reference_import(output_dir='data/openfoam_phase21/imported', sample_path='data/openfoam_phase21/case/postProcessing/sampleDict/50/sharedDomainGrid.xy', grid_points=31)"
 PYTHONPATH=src python -c "from pinn_fluid.figures import generate_figure_bundle; generate_figure_bundle('data/openfoam_phase21/imported', models=('openfoam_darcy_reference',))"
 ```
 
-Local Phase 21 artifact evidence is test-generated under temporary pytest directories. Real OpenFOAM case outputs, meshes, logs, `.npz`, `.json`, and `.png` outputs should stay under ignored `data/openfoam_phase21/` unless explicitly approved for commit.
+Local Phase 21 artifact evidence:
+
+- `data/openfoam_phase21/case/postProcessing/sampleDict/50/sharedDomainGrid.xy`
+- `data/openfoam_phase21/imported/dedicated_solver_manifest.json`
+- `data/openfoam_phase21/imported/openfoam_darcy_reference/fields.npz`
+- `data/openfoam_phase21/imported/openfoam_darcy_reference/history.json`
+- `data/openfoam_phase21/imported/openfoam_darcy_reference/metrics.json`
+- `data/openfoam_phase21/imported/figures/figure_manifest.json`
+
+These generated OpenFOAM case outputs, meshes, logs, `.npz`, `.json`, and `.png` outputs remain ignored under `data/openfoam_phase21/` unless explicitly approved for commit.
 
 Limitations:
 
-- Phase 21 adds OpenFOAM case-generation and sampled-field import contracts, not a committed OpenFOAM solve result.
-- OpenFOAM was not installed locally, so `blockMesh`, `simpleFoam`, and `postProcess` were not executed.
+- Phase 21 adds OpenFOAM case-generation and sampled-field import contracts; it does not commit the OpenFOAM solve result.
+- `simpleFoam` is superseded in OpenFOAM 13; the verified solver command is `foamRun -solver incompressibleFluid`.
 - It does not replace `run_all_experiments(...)` references or the regression-friendly finite-difference/manufactured references.
 - The generated OpenFOAM mesh uses whole top and bottom patches as an executable approximation while metadata preserves the intended top-left inlet and bottom-right outlet convention; a later phase should add a segmented OpenFOAM mesh before making physical validation claims.
 - The imported bundle mirrors OpenFOAM sample fields into `predicted_*` keys only to reuse existing figure-generation panels for a reference self-comparison.
@@ -819,6 +833,11 @@ Verification:
 
 - `python -m pytest tests/test_phase21_dedicated_solver_reference.py` first failed because the interrupted SciPy module did not expose the OpenFOAM metadata/API.
 - After implementation, `python -m pytest tests/test_phase21_dedicated_solver_reference.py` passed.
+- After OpenFOAM installation, `foamRun -solver incompressibleFluid` first failed because OpenFOAM 13 required `constant/momentumTransport`; a failing test was added and the writer was patched.
+- `postProcess -func sampleDict` then failed because `type face` had been renamed; a failing test was added and the writer was patched.
+- Sampling initially produced a diagonal set, so the writer was changed to an explicit `points` set that produced 961 samples for a 31 by 31 grid.
+- Verified local OpenFOAM commands: `blockMesh -case data/openfoam_phase21/case`, `foamRun -solver incompressibleFluid -case data/openfoam_phase21/case`, and `postProcess -func sampleDict -latestTime -case data/openfoam_phase21/case`.
+- Verified import and figure commands for `data/openfoam_phase21/imported`.
 - Final verification for the phase is `python -m pytest tests/test_phase21_dedicated_solver_reference.py`, `python -m pytest`, and `git diff --check`.
 
 ## Continuing Guidance

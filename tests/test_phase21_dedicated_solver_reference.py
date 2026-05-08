@@ -21,6 +21,8 @@ def test_openfoam_case_writer_records_shared_domain_geometry(tmp_path):
     expected_files = {
         "0/U",
         "0/p",
+        "constant/momentumTransport",
+        "constant/physicalProperties",
         "constant/transportProperties",
         "system/blockMeshDict",
         "system/controlDict",
@@ -46,6 +48,17 @@ def test_openfoam_case_writer_records_shared_domain_geometry(tmp_path):
     assert "outlet" in block_mesh
     assert "frontAndBack" in block_mesh
     assert "empty" in block_mesh
+
+    momentum_transport = (case_dir / "constant/momentumTransport").read_text()
+    physical_properties = (case_dir / "constant/physicalProperties").read_text()
+    assert "simulationType laminar;" in momentum_transport
+    assert "viscosityModel  constant;" in physical_properties
+    assert "nu              [0 2 -1 0 0 0 0] 0.25;" in physical_properties
+
+    sample_dict = (case_dir / "system/sampleDict").read_text()
+    assert "type points;" in sample_dict
+    assert "ordered     no;" in sample_dict
+    assert "type face;" not in sample_dict
 
 
 def test_openfoam_sample_import_preserves_orientation_and_schema(tmp_path):

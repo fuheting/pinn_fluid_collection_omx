@@ -707,7 +707,7 @@ Limitations: this is a clean local comparison against lightweight in-repo finite
 
 ## Phase 21 Dedicated Reference Solver Integration
 
-Phase 21 adds an OpenFOAM-oriented dedicated reference path. The selected stack is OpenFOAM `simpleFoam` for a steady incompressible laminar case. The local test environment used for this phase does not have `blockMesh`, `simpleFoam`, or `foamVersion` on `PATH`, so the committed work is the reproducible OpenFOAM case writer and sampled-field importer. The importer is tested with raw sampled-field fixtures so CI does not require a local OpenFOAM installation.
+Phase 21 adds an OpenFOAM-oriented dedicated reference path. The selected stack is OpenFOAM 13 through `foamRun -solver incompressibleFluid` for a steady incompressible laminar case. The importer is tested with raw sampled-field fixtures so CI does not require a local OpenFOAM installation, and a local OpenFOAM 13 run verified the generated case after installation.
 
 The generated case preserves the shared unit-square coordinate convention in an OpenFOAM-compatible thin extrusion: mathematical coordinates, `y=0` bottom, `y=1` top, a top boundary named `inlet`, a bottom boundary named `outlet`, side walls, and an `empty` front/back. The metadata records the intended top-left inlet and bottom-right outlet segments from the repository convention; the first generated case keeps those names and conventions while using whole top/bottom OpenFOAM patches as the executable approximation until a segmented mesh is added.
 
@@ -726,6 +726,8 @@ The generated OpenFOAM case includes:
 
 - `0/U`
 - `0/p`
+- `constant/momentumTransport`
+- `constant/physicalProperties`
 - `constant/transportProperties`
 - `system/blockMeshDict`
 - `system/controlDict`
@@ -744,24 +746,20 @@ The OpenFOAM sampled-field importer writes:
 
 The `fields.npz` schema is figure-compatible and includes `coordinates`, predicted fields mirrored from the OpenFOAM sample for self-comparison, `reference_pressure`, `reference_velocity`, `reference_u`, `reference_v`, `reference_speed`, `reference_residual`, and `reference_metadata_json`. The reference metadata records `reference_generator_name="openfoam_simplefoam_shared_domain"`, `reference_kind="dedicated-solver"`, `solver_stack="OpenFOAM simpleFoam"`, expected sampled columns, and the shared coordinate convention.
 
-Generate a case where OpenFOAM can be run:
+Generate, solve, sample, import, and plot a local OpenFOAM reference:
 
 ```bash
-PYTHONPATH=src python -c "from pinn_fluid.dedicated_solvers import OpenFOAMCaseConfig, write_openfoam_shared_domain_case; write_openfoam_shared_domain_case('data/openfoam_phase21/case', OpenFOAMCaseConfig(grid_points=31, viscosity=0.25))"
-cd data/openfoam_phase21/case
-blockMesh
-simpleFoam
-postProcess -func sampleDict -latestTime
-```
-
-After exporting a raw sample with columns `x y z p Ux Uy Uz`, import it into the repository artifact schema:
-
-```bash
-PYTHONPATH=src python -c "from pinn_fluid.dedicated_solvers import run_openfoam_reference_import; run_openfoam_reference_import(output_dir='data/openfoam_phase21/imported', sample_path='data/openfoam_phase21/case/postProcessing/sample/latestTime/sharedDomainGrid_p_U.xy', grid_points=31)"
+PYTHONPATH=src python -c "from pinn_fluid.dedicated_solvers import OpenFOAMCaseConfig, write_openfoam_shared_domain_case; write_openfoam_shared_domain_case('data/openfoam_phase21/case', OpenFOAMCaseConfig(grid_points=31, viscosity=0.25, end_time=50))"
+blockMesh -case data/openfoam_phase21/case
+foamRun -solver incompressibleFluid -case data/openfoam_phase21/case
+postProcess -func sampleDict -latestTime -case data/openfoam_phase21/case
+PYTHONPATH=src python -c "from pinn_fluid.dedicated_solvers import run_openfoam_reference_import; run_openfoam_reference_import(output_dir='data/openfoam_phase21/imported', sample_path='data/openfoam_phase21/case/postProcessing/sampleDict/50/sharedDomainGrid.xy', grid_points=31)"
 PYTHONPATH=src python -c "from pinn_fluid.figures import generate_figure_bundle; generate_figure_bundle('data/openfoam_phase21/imported', models=('openfoam_darcy_reference',))"
 ```
 
-Limitations: Phase 21 adds OpenFOAM case-generation and sampled-field import contracts, not a committed OpenFOAM result. OpenFOAM was not installed in the local environment, so no real `simpleFoam` solve was executed during verification. The first case is an OpenFOAM-compatible whole-patch approximation of the shared top-left inlet and bottom-right outlet geometry; a later phase should add a segmented OpenFOAM mesh before making physical validation claims.
+The verified local sample path was `data/openfoam_phase21/case/postProcessing/sampleDict/50/sharedDomainGrid.xy`, with 961 sampled points plus one header row for a 31 by 31 grid.
+
+Limitations: generated OpenFOAM and figure artifacts remain ignored under `data/` and are not committed. The first case is an OpenFOAM-compatible whole-patch approximation of the shared top-left inlet and bottom-right outlet geometry; a later phase should add a segmented OpenFOAM mesh before making physical validation claims. The imported bundle mirrors OpenFOAM sample fields into `predicted_*` keys only to reuse existing figure panels for a reference self-comparison.
 
 ## Environment Direction
 

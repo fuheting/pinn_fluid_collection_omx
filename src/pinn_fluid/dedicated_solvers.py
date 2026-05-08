@@ -68,6 +68,15 @@ def _write(path: Path, content: str) -> None:
     path.write_text(content)
 
 
+def _openfoam_sample_points(grid_points: int) -> str:
+    values = np.linspace(0.0, 1.0, grid_points)
+    lines = []
+    for x in values:
+        for y in values:
+            lines.append(f"            ({x:.12g} {y:.12g} 0)")
+    return "\n".join(lines)
+
+
 def write_openfoam_shared_domain_case(
     case_dir: Path | str,
     config: OpenFOAMCaseConfig | None = None,
@@ -200,6 +209,22 @@ nu              [0 2 -1 0 0 0 0] {active.viscosity};
 """,
     )
     _write(
+        root / "constant/physicalProperties",
+        _foam_header("dictionary", "physicalProperties")
+        + f"""
+viscosityModel  constant;
+
+nu              [0 2 -1 0 0 0 0] {active.viscosity};
+""",
+    )
+    _write(
+        root / "constant/momentumTransport",
+        _foam_header("dictionary", "momentumTransport")
+        + """
+simulationType laminar;
+""",
+    )
+    _write(
         root / "system/controlDict",
         _foam_header("dictionary", "controlDict")
         + f"""
@@ -255,7 +280,7 @@ relaxationFactors
     _write(
         root / "system/sampleDict",
         _foam_header("dictionary", "sampleDict")
-        + f"""
+        + """
 type sets;
 libs ("libsampling.so");
 interpolationScheme cellPoint;
@@ -263,13 +288,17 @@ setFormat raw;
 sets
 (
     sharedDomainGrid
-    {{
-        type face;
+    {
+        type points;
         axis xyz;
-        start (0 0 0);
-        end (1 1 0);
-        nPoints {active.grid_points};
-    }}
+        ordered     no;
+        points
+        (
+"""
+        + _openfoam_sample_points(active.grid_points)
+        + """
+        );
+    }
 );
 fields (p U);
 """,
