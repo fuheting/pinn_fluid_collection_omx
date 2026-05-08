@@ -74,16 +74,24 @@ def _format_tick(value: float) -> str:
     return f"{value:.6g}"
 
 
-def _colorbar_ticks(values: np.ndarray) -> list[float]:
+def _value_limits(values: np.ndarray) -> list[float]:
     flattened = _scalar(values)
-    low = float(np.min(flattened))
-    high = float(np.max(flattened))
+    return [float(np.min(flattened)), float(np.max(flattened))]
+
+
+def _combined_limits(*values: np.ndarray) -> list[float]:
+    flattened = np.concatenate([_scalar(value) for value in values])
+    return [float(np.min(flattened)), float(np.max(flattened))]
+
+
+def _colorbar_ticks(values: np.ndarray, limits: list[float] | None = None) -> list[float]:
+    low, high = _value_limits(values) if limits is None else [float(limits[0]), float(limits[1])]
     middle = 0.5 * (low + high)
     return [low, middle, high]
 
 
-def _colorbar_tick_labels(values: np.ndarray) -> list[str]:
-    return [_format_tick(value) for value in _colorbar_ticks(values)]
+def _colorbar_tick_labels(values: np.ndarray, limits: list[float] | None = None) -> list[str]:
+    return [_format_tick(value) for value in _colorbar_ticks(values, limits)]
 
 
 def _write_rgb_png(path: Path, image: np.ndarray) -> None:
@@ -303,10 +311,14 @@ def _draw_boundary_markers(
         )
 
 
-def _fallback_scalar_image(values: np.ndarray, grid_points: int, scale: int = 20) -> np.ndarray:
+def _fallback_scalar_image(
+    values: np.ndarray,
+    grid_points: int,
+    scale: int = 20,
+    limits: list[float] | None = None,
+) -> np.ndarray:
     field = _reshape(values, grid_points)
-    low = float(np.min(field))
-    high = float(np.max(field))
+    low, high = _value_limits(field) if limits is None else [float(limits[0]), float(limits[1])]
     span = high - low if high > low else 1.0
     normalized = (field - low) / span
     image = _turbo_rgb(normalized)
@@ -319,9 +331,10 @@ def _fallback_scalar_canvas(
     grid_points: int,
     title: str,
     scale: int,
+    limits: list[float] | None = None,
     show_title: bool = True,
 ) -> np.ndarray:
-    field = _fallback_scalar_image(values, grid_points, scale=scale)
+    field = _fallback_scalar_image(values, grid_points, scale=scale, limits=limits)
     field_height, field_width, _ = field.shape
     top = 30 if show_title else 8
     left = 36
@@ -362,7 +375,7 @@ def _fallback_scalar_canvas(
             y1=bar_y + offset + 1,
             color=color,
         )
-    labels = _colorbar_tick_labels(values)
+    labels = _colorbar_tick_labels(values, limits)
     for label, y in (
         (labels[2], bar_y),
         (labels[1], bar_y + field_height // 2 - 3),
@@ -387,6 +400,7 @@ def _fallback_field_panel(
     path: Path,
     column_labels: tuple[str, ...] = (),
     row_labels: tuple[str, ...] = (),
+    color_limits: list[list[float] | None] | None = None,
 ) -> None:
     has_comparison_labels = bool(column_labels or row_labels)
     tiles = [
@@ -395,9 +409,10 @@ def _fallback_field_panel(
             grid_points=grid_points,
             title=title,
             scale=20,
+            limits=None if color_limits is None else color_limits[index],
             show_title=not has_comparison_labels,
         )
-        for title, values in panels
+        for index, (title, values) in enumerate(panels)
     ]
     tile_height, tile_width, _ = tiles[0].shape
     rows = int(np.ceil(len(tiles) / columns))
@@ -484,6 +499,7 @@ def _save_field_panel(
     path: Path,
     column_labels: tuple[str, ...] = (),
     row_labels: tuple[str, ...] = (),
+    color_limits: list[list[float] | None] | None = None,
 ) -> None:
     try:
         import matplotlib
@@ -498,6 +514,7 @@ def _save_field_panel(
             path=path,
             column_labels=column_labels,
             row_labels=row_labels,
+            color_limits=color_limits,
         )
         return
 
@@ -510,11 +527,14 @@ def _save_field_panel(
     axes_array = np.atleast_1d(axes).reshape(rows, columns)
     flat_axes = axes_array.reshape(-1)
     for index, (axis, (panel_title, values)) in enumerate(zip(flat_axes, panels)):
+        limits = None if color_limits is None else color_limits[index]
         image = axis.imshow(
             _reshape(values, grid_points),
             origin="lower",
             extent=(0, 1, 0, 1),
             cmap=FIELD_COLORMAP,
+            vmin=None if limits is None else limits[0],
+            vmax=None if limits is None else limits[1],
         )
         axis.plot(
             BOUNDARY_MARKERS["inlet"]["x_range"],
@@ -537,9 +557,9 @@ def _save_field_panel(
         axis.set_xticks([])
         axis.set_yticks([])
         colorbar = fig.colorbar(image, ax=axis, fraction=0.046, pad=0.04)
-        ticks = _colorbar_ticks(values)
+        ticks = _colorbar_ticks(values, limits)
         colorbar.set_ticks(ticks)
-        colorbar.set_ticklabels(_colorbar_tick_labels(values))
+        colorbar.set_ticklabels(_colorbar_tick_labels(values, limits))
         colorbar.set_label(SCALAR_LEGEND, fontsize=8, labelpad=10)
     for row, label in enumerate(row_labels):
         axes_array[row, 0].set_ylabel(
@@ -566,6 +586,7 @@ def _save_scalar_field_image(
     grid_points: int,
     title: str,
     path: Path,
+    limits: list[float] | None = None,
 ) -> None:
     try:
         import matplotlib
@@ -575,7 +596,7 @@ def _save_scalar_field_image(
     except ModuleNotFoundError:
         _write_rgb_png(
             path,
-            _fallback_scalar_canvas(values, grid_points=grid_points, title=title, scale=28),
+            _fallback_scalar_canvas(values, grid_points=grid_points, title=title, scale=28, limits=limits),
         )
         return
 
@@ -585,6 +606,8 @@ def _save_scalar_field_image(
         origin="lower",
         extent=(0, 1, 0, 1),
         cmap=FIELD_COLORMAP,
+        vmin=None if limits is None else limits[0],
+        vmax=None if limits is None else limits[1],
     )
     axis.plot(
         BOUNDARY_MARKERS["inlet"]["x_range"],
@@ -607,9 +630,9 @@ def _save_scalar_field_image(
     axis.set_ylabel("y")
     axis.legend(loc="upper right", fontsize="x-small")
     colorbar = fig.colorbar(image, ax=axis)
-    ticks = _colorbar_ticks(values)
+    ticks = _colorbar_ticks(values, limits)
     colorbar.set_ticks(ticks)
-    colorbar.set_ticklabels(_colorbar_tick_labels(values))
+    colorbar.set_ticklabels(_colorbar_tick_labels(values, limits))
     colorbar.set_label(SCALAR_LEGEND)
     fig.tight_layout()
     fig.savefig(path, dpi=140)
@@ -721,6 +744,44 @@ def _velocity_pressure_separate_images(fields: np.lib.npyio.NpzFile) -> dict[str
     }
 
 
+def _comparison_color_limits(
+    panels: list[tuple[str, np.ndarray]],
+    row_labels: tuple[str, ...],
+) -> tuple[list[list[float] | None], dict[str, dict[str, list[float]]]]:
+    limits: list[list[float] | None] = []
+    metadata: dict[str, dict[str, list[float]]] = {}
+    for row_index, label in enumerate(row_labels):
+        offset = row_index * 3
+        predicted = panels[offset][1]
+        actual = panels[offset + 1][1]
+        residual = panels[offset + 2][1]
+        predicted_actual = _combined_limits(predicted, actual)
+        residual_limits = _value_limits(residual)
+        metadata[label] = {
+            "predicted_actual": predicted_actual,
+            "residual": residual_limits,
+        }
+        limits.extend([predicted_actual, predicted_actual, residual_limits])
+    return limits, metadata
+
+
+def _separate_image_color_limits(
+    images: dict[str, tuple[str, np.ndarray]],
+) -> dict[str, list[float]]:
+    limits = {key: _value_limits(values) for key, (_, values) in images.items()}
+    for predicted_key, actual_key in (
+        ("predicted_u", "actual_u"),
+        ("predicted_v", "actual_v"),
+        ("predicted_p", "actual_p"),
+        ("predicted_speed", "actual_speed"),
+    ):
+        if predicted_key in images and actual_key in images:
+            shared = _combined_limits(images[predicted_key][1], images[actual_key][1])
+            limits[predicted_key] = shared
+            limits[actual_key] = shared
+    return limits
+
+
 def _model_field_panels(model: str, fields: np.lib.npyio.NpzFile) -> tuple[list[tuple[str, np.ndarray]], int]:
     if model == "darcy":
         return _darcy_panels(fields), 3
@@ -748,18 +809,168 @@ def _write_separate_images(
     target: Path,
 ) -> dict[str, dict[str, str]]:
     images: dict[str, dict[str, str]] = {}
-    for key, (title, values) in _model_separate_images(model, fields).items():
+    image_values = _model_separate_images(model, fields)
+    limits_by_key = _separate_image_color_limits(image_values)
+    for key, (title, values) in image_values.items():
         path = target / f"{model}_{key}.png"
-        _save_scalar_field_image(values, grid_points=grid_points, title=title, path=path)
+        limits = limits_by_key[key]
+        _save_scalar_field_image(
+            values,
+            grid_points=grid_points,
+            title=title,
+            path=path,
+            limits=limits,
+        )
         images[key] = {
             "path": path.relative_to(root).as_posix(),
             "title": title,
             "legend": SCALAR_LEGEND,
             "colormap": FIELD_COLORMAP,
-            "colorbar_ticks": _colorbar_ticks(values),
-            "colorbar_tick_labels": _colorbar_tick_labels(values),
+            "color_limits": limits,
+            "colorbar_ticks": _colorbar_ticks(values, limits),
+            "colorbar_tick_labels": _colorbar_tick_labels(values, limits),
         }
     return images
+
+
+def _quiver_fields(
+    model: str,
+    fields: np.lib.npyio.NpzFile,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    if model == "darcy":
+        return (
+            _scalar(fields["predicted_pressure"]),
+            np.asarray(fields["predicted_velocity"], dtype=np.float64),
+            _scalar(fields["reference_pressure"]),
+            np.asarray(fields["reference_velocity"], dtype=np.float64),
+        )
+    predicted_velocity = np.column_stack((_scalar(fields["predicted_u"]), _scalar(fields["predicted_v"])))
+    reference_velocity = np.column_stack((_scalar(fields["reference_u"]), _scalar(fields["reference_v"])))
+    return (
+        _scalar(fields["predicted_pressure"]),
+        predicted_velocity,
+        _scalar(fields["reference_pressure"]),
+        reference_velocity,
+    )
+
+
+def _draw_fallback_arrows(
+    image: np.ndarray,
+    velocity: np.ndarray,
+    *,
+    left: int,
+    top: int,
+    grid_points: int,
+    scale: int,
+) -> None:
+    step = max(1, grid_points // 6)
+    field_size = grid_points * scale
+    max_speed = float(np.max(np.sqrt(np.sum(velocity**2, axis=1))))
+    if max_speed <= 0.0:
+        max_speed = 1.0
+    for x_index in range(0, grid_points, step):
+        for y_index in range(0, grid_points, step):
+            flat_index = x_index * grid_points + y_index
+            u, v = velocity[flat_index]
+            start_x = left + round(x_index * scale + scale / 2)
+            start_y = top + field_size - round(y_index * scale + scale / 2)
+            end_x = start_x + round(float(u) / max_speed * scale * 0.8)
+            end_y = start_y - round(float(v) / max_speed * scale * 0.8)
+            _draw_line(image, (start_x, start_y), (end_x, end_y), (0, 0, 0))
+
+
+def _fallback_pressure_velocity_quiver(
+    *,
+    pressure: np.ndarray,
+    velocity: np.ndarray,
+    grid_points: int,
+    title: str,
+    path: Path,
+    limits: list[float],
+) -> None:
+    image = _fallback_scalar_canvas(
+        pressure,
+        grid_points=grid_points,
+        title=title,
+        scale=24,
+        limits=limits,
+    )
+    _draw_fallback_arrows(image, velocity, left=36, top=30, grid_points=grid_points, scale=24)
+    _write_rgb_png(path, image)
+
+
+def _save_pressure_velocity_quiver(
+    *,
+    model: str,
+    fields: np.lib.npyio.NpzFile,
+    grid_points: int,
+    root: Path,
+    target: Path,
+) -> str:
+    predicted_pressure, predicted_velocity, actual_pressure, actual_velocity = _quiver_fields(model, fields)
+    pressure_limits = _combined_limits(predicted_pressure, actual_pressure)
+    path = target / f"{model}_pressure_velocity_quiver.png"
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ModuleNotFoundError:
+        _fallback_pressure_velocity_quiver(
+            pressure=predicted_pressure,
+            velocity=predicted_velocity,
+            grid_points=grid_points,
+            title=f"{model} predicted pressure and velocity",
+            path=path,
+            limits=pressure_limits,
+        )
+        return path.relative_to(root).as_posix()
+
+    x_values = np.linspace(0.0, 1.0, grid_points)
+    y_values = np.linspace(0.0, 1.0, grid_points)
+    grid_x, grid_y = np.meshgrid(x_values, y_values, indexing="xy")
+    step = max(1, grid_points // 12)
+    fig, axes = plt.subplots(1, 2, figsize=(8.2, 3.6), sharex=True, sharey=True)
+    for axis, label, pressure, velocity in (
+        (axes[0], "predicted", predicted_pressure, predicted_velocity),
+        (axes[1], "actual", actual_pressure, actual_velocity),
+    ):
+        pressure_field = _reshape(pressure, grid_points)
+        u_field = _reshape(velocity[:, 0], grid_points)
+        v_field = _reshape(velocity[:, 1], grid_points)
+        image = axis.contourf(
+            grid_x,
+            grid_y,
+            pressure_field,
+            levels=20,
+            cmap=FIELD_COLORMAP,
+            vmin=pressure_limits[0],
+            vmax=pressure_limits[1],
+        )
+        axis.quiver(
+            grid_x[::step, ::step],
+            grid_y[::step, ::step],
+            u_field[::step, ::step],
+            v_field[::step, ::step],
+            color="black",
+            scale=20,
+            width=0.004,
+        )
+        axis.plot(BOUNDARY_MARKERS["inlet"]["x_range"], [1.0, 1.0], color="red", linewidth=3)
+        axis.plot(BOUNDARY_MARKERS["outlet"]["x_range"], [0.0, 0.0], color="blue", linewidth=3)
+        axis.set_title(f"{label} pressure + velocity")
+        axis.set_xlabel("x")
+        axis.set_ylabel("y")
+        axis.set_aspect("equal", adjustable="box")
+    colorbar = fig.colorbar(image, ax=axes.ravel().tolist(), shrink=0.82)
+    colorbar.set_ticks(_colorbar_ticks(predicted_pressure, pressure_limits))
+    colorbar.set_ticklabels(_colorbar_tick_labels(predicted_pressure, pressure_limits))
+    colorbar.set_label("pressure")
+    fig.suptitle(f"{model} pressure contours with velocity arrows")
+    fig.tight_layout()
+    fig.savefig(path, dpi=140)
+    plt.close(fig)
+    return path.relative_to(root).as_posix()
 
 
 def generate_figure_bundle(
@@ -788,6 +999,10 @@ def generate_figure_bundle(
             grid_points = _grid_points(fields)
             panels, columns = _model_field_panels(model, fields)
             field_layout = _model_field_layout(model)
+            panel_limits, panel_limit_metadata = _comparison_color_limits(
+                panels,
+                tuple(field_layout["rows"]),
+            )
             field_panel = target / f"{model}_fields.png"
             field_panel_title = f"{model} field comparison"
             _save_field_panel(
@@ -798,8 +1013,16 @@ def generate_figure_bundle(
                 path=field_panel,
                 column_labels=tuple(field_layout["columns"]),
                 row_labels=tuple(field_layout["rows"]),
+                color_limits=panel_limits,
             )
             separate_field_images = _write_separate_images(
+                model=model,
+                fields=fields,
+                grid_points=grid_points,
+                root=root,
+                target=target,
+            )
+            pressure_velocity_quiver = _save_pressure_velocity_quiver(
                 model=model,
                 fields=fields,
                 grid_points=grid_points,
@@ -822,7 +1045,9 @@ def generate_figure_bundle(
                 "field_panel_title": field_panel_title,
                 "field_panel_layout": field_layout,
                 "field_panel_tiles": [label for label, _ in panels],
+                "field_panel_color_limits": panel_limit_metadata,
                 "boundary_markers": BOUNDARY_MARKERS,
+                "pressure_velocity_quiver": pressure_velocity_quiver,
                 "convergence_panel": convergence_panel.relative_to(root).as_posix(),
                 "convergence_panel_title": convergence_panel_title,
                 "convergence_legend": _history_legend(history),

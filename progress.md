@@ -312,6 +312,8 @@ Completed in this pass:
 - Added the `turbo` colormap, numeric min/mid/max colorbar values, field-panel layout metadata, convergence axes, titled convergence legends, and matching manifest metadata.
 - Added red shared-inlet and blue shared-outlet overlays to flow-field panels and separate scalar field images, with marker metadata in `figure_manifest.json`.
 - Moved field-panel predicted/actual/residual column labels to the bottom, increased and bolded row/column labels, and separated fallback colorbar labels from tick values.
+- Standardized field-panel and separate-image color limits so predicted and actual fields for the same variable share the same value range while residual/error fields keep a residual-specific range.
+- Added per-model pressure-velocity quiver diagnostics that overlay velocity arrows on pressure contours and preserve red/blue inlet/outlet markers.
 - Hardened the dependency-free PNG fallback so regenerated figures still show titles, axes, colorbars, and convergence legends when `matplotlib` is unavailable.
 - Wrote `figures/figure_manifest.json` with the generated panel paths.
 - Added tests that first failed on the missing `pinn_fluid.figures` module, then verified Darcy and velocity-pressure panels against small synthetic `fields.npz` and `history.json` fixtures.
@@ -391,6 +393,27 @@ Known limitations from the actual runs:
 - The moderate demo tier is suitable for paper-draft artifact procurement and workflow validation, not final accuracy claims.
 - Cross-model values should not be used to rank PINN effectiveness because the references are lightweight paper-demo procurement targets.
 - Generated `.npz`, `.json`, and `.png` outputs remain local under ignored `data/` directories.
+
+## Follow-Up: Boundary And Visualization Diagnostics
+
+Status: complete.
+
+Completed in this pass:
+
+- Confirmed the shared coordinate convention remains Cartesian unit-square coordinates: `x` increases left-to-right, `y=0` is bottom, and `y=1` is top.
+- Added `pinn_fluid.diagnostics.boundary_diagnostic_report(...)` to print counts and min/max coordinates for inlet, outlet, wall, and interior samples.
+- Added `python -m pinn_fluid.diagnostics <png> --report <json>` to plot the boundary masks and write a JSON coordinate report.
+- Confirmed the expected default masks are top-left inlet (`x in [0, 0.25]`, `y=1`) and bottom-right outlet (`x in [0.75, 1]`, `y=0`).
+- Added pressure-velocity quiver figures for Darcy, Stokes, Oseen, and Navier-Stokes figure bundles.
+- Updated figure manifests with pressure-velocity quiver paths and field-panel color-limit metadata.
+- Updated separate scalar image metadata with explicit `color_limits`; predicted and actual images now share limits for `u`, `v`, pressure, and speed.
+- Updated `README.md` with boundary diagnostic commands, coordinate-convention notes, quiver diagnostic outputs, and the color-scale policy.
+
+Diagnosis:
+
+- The boundary point generation and mask definitions match the intended shared domain.
+- The plotting path uses `origin="lower"` with the same `x, y` coordinate convention; no vertical flip or `xy`/`ij` mismatch was found in the current reshape path.
+- Remaining physically suspicious extrema or structured residuals should be treated as reference/training/model-form limitations until the new boundary-mask and quiver diagnostics show an actual coordinate mismatch.
 
 ## Continuing Guidance
 

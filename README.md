@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-The current phase documents the completed local sanity and paper-demo result-procurement runs. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, and summary metrics, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, and a documented inventory of the locally procured paper-demo bundle.
+The current phase documents the completed local sanity and paper-demo result-procurement runs plus follow-up diagnostics for visually suspicious flow fields. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, and summary metrics, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, and a documented inventory of the locally procured paper-demo bundle.
 
 ## Planned Phases
 
@@ -61,6 +61,8 @@ All flow models should start from the same unit-square example unless a later ph
 ```text
 Omega = [0, 1] x [0, 1]
 ```
+
+The coordinate convention is Cartesian: `x` increases left-to-right, `y=0` is the bottom boundary, and `y=1` is the top boundary. The shared inlet is therefore the top-left segment (`x in [0, 0.25]`, `y=1`), and the shared outlet is the bottom-right segment (`x in [0.75, 1]`, `y=0`). Plotting code uses this same convention with `origin="lower"`.
 
 Boundary patches are model-agnostic dictionaries:
 
@@ -299,9 +301,32 @@ Generated Phase 12 figures:
 - Separate scalar field images for Stokes/Oseen/Navier-Stokes predicted, actual, and residual/error `u`, `v`, pressure, speed, and residual-magnitude fields.
 - Per-model convergence panels: total objective and every recorded component loss versus iteration.
 - Flow-field figures use the `turbo` colormap, include value colorbars with min/mid/max tick labels, and mark the shared inlet in red and outlet in blue.
+- Predicted and actual fields for the same variable share the same color range; residual/error panels keep their own residual range.
+- Per-model pressure-velocity quiver diagnostics overlay velocity arrows on pressure contours so the plotted flow direction can be checked against the red inlet and blue outlet.
 - Convergence figures include axis labels, log-scaled objective values, and a titled legend for loss components.
 - When `matplotlib` is unavailable, the dependency-free PNG fallback still draws readable titles, axes, colorbars, and convergence legends.
-- Figure manifests include field-panel row/column layout, inlet/outlet marker metadata, panel titles, convergence legend entries, convergence axes, colormap names, and scalar colorbar tick values.
+- Figure manifests include field-panel row/column layout, shared predicted/actual color limits, inlet/outlet marker metadata, pressure-velocity quiver paths, panel titles, convergence legend entries, convergence axes, colormap names, and scalar colorbar tick values.
+
+## Boundary And Flow Diagnostics
+
+Use `pinn_fluid.diagnostics` to verify the boundary masks before interpreting a result bundle:
+
+```bash
+PYTHONPATH=src python -m pinn_fluid.diagnostics \
+  data/boundary_diagnostics.png \
+  --report data/boundary_diagnostics.json \
+  --interior-points-per-axis 9 \
+  --boundary-points-per-patch 9
+```
+
+The JSON report prints min/max coordinates and counts for `inlet`, `outlet`, `walls`, and `interior`. Expected values for the default unit square are top-left inlet coordinates with `x` in `[0, 0.25]` and `y=1`, plus bottom-right outlet coordinates with `x` in `[0.75, 1]` and `y=0`.
+
+After generating a figure bundle, inspect:
+
+- `figures/{model}_pressure_velocity_quiver.png` for pressure contours with velocity arrows.
+- `figures/figure_manifest.json` for `field_panel_color_limits`, `separate_field_images[*].color_limits`, and `boundary_markers`.
+
+If extrema still appear physically suspicious after these checks, treat that as a model/reference/training limitation rather than a plotting flip until the diagnostic mask and quiver plots show otherwise.
 
 ## Phase 13 Local Runs
 
@@ -363,7 +388,7 @@ Each root contains `run_manifest.json`, per-model `fields.npz`, `history.json`, 
 
 ## Phase 14 Figure Inventory And Limits
 
-The Phase 13 paper-demo bundle in `data/experiments_paper_demo/` satisfies the minimum paper-demo figure inventory without committing generated files. The same file pattern exists for `data/experiments_sanity/`. Regenerate the bundle with `PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo` after changing figure code. Flow-field comparison panels use predicted/actual/residual columns with bold bottom column labels and bold left row labels; flow-field figures use `turbo` with numeric colorbar values and red/blue inlet/outlet boundary markers. Convergence figures label the iteration and log-objective axes and include a titled loss-component legend. The fallback renderer preserves those visual annotations even in environments where `matplotlib` is not installed, with colorbar labels separated from tick values.
+The Phase 13 paper-demo bundle in `data/experiments_paper_demo/` satisfies the minimum paper-demo figure inventory without committing generated files. The same file pattern exists for `data/experiments_sanity/`. Regenerate the bundle with `PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo` after changing figure code. Flow-field comparison panels use predicted/actual/residual columns with bold bottom column labels and bold left row labels; flow-field figures use `turbo` with numeric colorbar values, shared predicted/actual color limits per variable, and red/blue inlet/outlet boundary markers. Convergence figures label the iteration and log-objective axes and include a titled loss-component legend. The fallback renderer preserves those visual annotations even in environments where `matplotlib` is not installed, with colorbar labels separated from tick values. Pressure-velocity quiver panels are generated for every model to show whether velocity arrows move from the red inlet toward the blue outlet.
 
 Paper-demo figure inventory:
 
@@ -373,6 +398,10 @@ Paper-demo figure inventory:
 | Stokes | `data/experiments_paper_demo/figures/stokes_fields.png` | `data/experiments_paper_demo/figures/stokes_convergence.png` |
 | Oseen | `data/experiments_paper_demo/figures/oseen_fields.png` | `data/experiments_paper_demo/figures/oseen_convergence.png` |
 | Navier-Stokes | `data/experiments_paper_demo/figures/navier_stokes_fields.png` | `data/experiments_paper_demo/figures/navier_stokes_convergence.png` |
+
+Pressure-velocity diagnostic panels:
+
+- `data/experiments_paper_demo/figures/{darcy,stokes,oseen,navier_stokes}_pressure_velocity_quiver.png`
 
 Paper-demo numeric and report artifacts:
 

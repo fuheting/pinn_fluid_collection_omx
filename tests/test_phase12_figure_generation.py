@@ -252,8 +252,11 @@ def test_generate_figure_bundle_creates_darcy_field_and_convergence_panels(tmp_p
         "speed actual",
         "speed residual",
     ]
+    assert darcy_entry["field_panel_color_limits"]["pressure"]["predicted_actual"] == [0.0, 1.0]
+    assert darcy_entry["pressure_velocity_quiver"] == "figures/darcy_pressure_velocity_quiver.png"
     _assert_png(tmp_path / darcy_entry["field_panel"])
     _assert_png(tmp_path / darcy_entry["convergence_panel"])
+    _assert_png(tmp_path / darcy_entry["pressure_velocity_quiver"])
     saved_manifest = json.loads((tmp_path / "figures" / "figure_manifest.json").read_text())
     assert saved_manifest == manifest
 
@@ -299,6 +302,8 @@ def test_generate_figure_bundle_creates_velocity_pressure_panels(tmp_path):
         "pressure actual",
         "pressure residual",
     ]
+    assert stokes_entry["field_panel_color_limits"]["pressure"]["predicted_actual"] == [0.0, 2.0]
+    assert stokes_entry["pressure_velocity_quiver"] == "figures/stokes_pressure_velocity_quiver.png"
     assert stokes_entry["convergence_panel_title"] == "stokes convergence"
     assert stokes_entry["convergence_legend"] == [
         "total",
@@ -313,6 +318,7 @@ def test_generate_figure_bundle_creates_velocity_pressure_panels(tmp_path):
     assert stokes_entry["convergence_legend_title"] == "loss components"
     _assert_png(tmp_path / stokes_entry["field_panel"])
     _assert_png(tmp_path / stokes_entry["convergence_panel"])
+    _assert_png(tmp_path / stokes_entry["pressure_velocity_quiver"])
 
 
 def test_generate_figure_bundle_creates_separate_predicted_actual_and_residual_images(tmp_path):
@@ -360,3 +366,7 @@ def test_generate_figure_bundle_creates_separate_predicted_actual_and_residual_i
         assert len(separate[key]["colorbar_ticks"]) == 3
         assert len(separate[key]["colorbar_tick_labels"]) == 3
         _assert_png(tmp_path / separate[key]["path"])
+    assert separate["predicted_u"]["color_limits"] == [0.0, 1.0]
+    assert separate["actual_u"]["color_limits"] == [0.0, 1.0]
+    assert separate["predicted_p"]["color_limits"] == [0.0, 2.0]
+    assert separate["actual_p"]["color_limits"] == [0.0, 2.0]
