@@ -71,6 +71,14 @@ OSEEN_REFERENCE_METADATA: dict[str, object] = {
     "reference_kind": "manufactured",
 }
 
+NAVIER_STOKES_REFERENCE_METADATA: dict[str, object] = {
+    "reference_generator_name": "navier_stokes_streamfunction_reference",
+    "pde_model_represented": "Navier-Stokes incompressible momentum and continuity",
+    "boundary_condition_type": "manufactured velocity inlet/outlet with no-slip horizontal solid walls",
+    "coordinate_convention": COORDINATE_CONVENTION_METADATA,
+    "reference_kind": "manufactured",
+}
+
 
 @dataclass(frozen=True)
 class TrainingHistory:
@@ -445,6 +453,56 @@ def _oseen_reference_metadata(peak_velocity: float) -> dict[str, object]:
     return metadata
 
 
+def _navier_stokes_reference_fields(
+    grid_points: int,
+    *,
+    viscosity: float,
+    peak_velocity: float,
+) -> dict[str, np.ndarray]:
+    """Return a deterministic manufactured Navier-Stokes streamfunction reference."""
+
+    coordinates = _grid_coordinates(grid_points).to(dtype=torch.float64).requires_grad_(True)
+    x = coordinates[:, :1]
+    y = coordinates[:, 1:2]
+    inlet_window = _smoothstep(x, 0.0, 0.25)
+    outlet_window = _smoothstep(x, 0.75, 1.0)
+    top_layer = _smoothstep(y, 0.55, 1.0)
+    bottom_layer = 1.0 - _smoothstep(y, 0.0, 0.45)
+    scale = peak_velocity / 6.0
+    streamfunction = scale * (inlet_window * top_layer + outlet_window * bottom_layer)
+    stream_gradient = torch.autograd.grad(
+        streamfunction,
+        coordinates,
+        grad_outputs=torch.ones_like(streamfunction),
+        create_graph=True,
+        retain_graph=True,
+    )[0]
+    u = stream_gradient[:, 1:2]
+    v = -stream_gradient[:, :1]
+    pressure = coordinates[:, :1] * 0.0
+    residuals = navier_stokes_residuals(
+        u,
+        v,
+        pressure,
+        coordinates,
+        viscosity=viscosity,
+    )
+    residual_magnitude = torch.sqrt(sum(value.square() for value in residuals.values()))
+    velocity = torch.cat((u, v), dim=1)
+
+    return {
+        "u": u.detach().numpy(),
+        "v": v.detach().numpy(),
+        "pressure": pressure.detach().numpy(),
+        "velocity": velocity.detach().numpy(),
+        "speed": torch.linalg.norm(velocity, dim=1, keepdim=True).detach().numpy(),
+        "continuity": residuals["continuity"].detach().numpy(),
+        "x_momentum": residuals["x_momentum"].detach().numpy(),
+        "y_momentum": residuals["y_momentum"].detach().numpy(),
+        "residual": residual_magnitude.detach().numpy(),
+    }
+
+
 def run_darcy_experiment(config: ExperimentConfig | None = None) -> ExperimentResult:
     """Run the deterministic Darcy PINN/reference vertical-slice experiment."""
 
@@ -704,7 +762,7 @@ def run_poiseuille_navier_stokes_experiment(
     active = ExperimentConfig() if config is None else config
     return _run_shared_patch_vector_experiment(
         model_name="navier_stokes",
-        reference="shared_patch_unit_square_reference",
+        reference="manufactured_navier_stokes_streamfunction",
         config=active,
         residual_builder=lambda outputs, coordinates: navier_stokes_residuals(
             outputs["u"],
@@ -713,11 +771,12 @@ def run_poiseuille_navier_stokes_experiment(
             coordinates,
             viscosity=active.viscosity,
         ),
-        reference_builder=lambda: _shared_patch_vector_reference(
+        reference_builder=lambda: _navier_stokes_reference_fields(
             active.grid_points,
-            active.darcy_reference_iterations,
+            viscosity=active.viscosity,
+            peak_velocity=active.peak_velocity,
         ),
-        reference_metadata=SHARED_PATCH_VECTOR_REFERENCE_METADATA,
+        reference_metadata=NAVIER_STOKES_REFERENCE_METADATA,
     )
 
 
@@ -827,10 +886,12 @@ __all__ = [
     "TrainingHistory",
     "COORDINATE_CONVENTION_METADATA",
     "DARCY_REFERENCE_METADATA",
+    "NAVIER_STOKES_REFERENCE_METADATA",
     "OSEEN_REFERENCE_METADATA",
     "SHARED_PATCH_VECTOR_REFERENCE_METADATA",
     "STOKES_REFERENCE_METADATA",
     "_fd_darcy_reference_fields",
+    "_navier_stokes_reference_fields",
     "_oseen_reference_fields",
     "_stokes_reference_fields",
     "run_all_experiments",

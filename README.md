@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-The current phase adds an Oseen-specific manufactured actual field before the Navier-Stokes reference is replaced. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, summary metrics, and explicit reference metadata, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, and a documented inventory of the locally procured paper-demo bundle.
+The current phase adds a Navier-Stokes-specific manufactured actual field so every active model now has a model-specific reference source. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, summary metrics, and explicit reference metadata, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, and a documented inventory of the locally procured paper-demo bundle.
 
 ## Planned Phases
 
@@ -36,7 +36,7 @@ The current phase adds an Oseen-specific manufactured actual field before the Na
 | 16 | Darcy ground truth hardening | Complete |
 | 17 | Stokes model-specific manufactured ground truth | Complete |
 | 18 | Oseen model-specific ground truth | Complete |
-| 19 | Navier-Stokes model-specific ground truth | Planned |
+| 19 | Navier-Stokes model-specific ground truth | Complete |
 | 20 | True performance comparison run with model-specific actual fields | Planned |
 | 21 | Dedicated external CFD/scientific-computing reference solve with OpenFOAM, FEniCS, FiPy, or similar | Planned |
 
@@ -257,9 +257,9 @@ Phases 8-10 add `pinn_fluid.experiments` for lightweight local comparisons as ph
 - `ExperimentResult` stores model name, reference source, grid shape, metrics, and artifact paths.
 - `ExperimentResult` stores reference metadata with the generator name, PDE model represented by the reference, boundary condition type, coordinate convention, and reference kind.
 - `run_darcy_experiment(...)` trains a small Darcy pressure field and compares it to an in-repo finite-difference Laplace reference on a deterministic grid. The Darcy actual field now exposes pressure, `u`, `v`, speed, and a finite-difference Laplace residual diagnostic.
-- `run_poiseuille_navier_stokes_experiment(...)` keeps the historical API name but now trains a small velocity-pressure field on the same shared unit-square patch geometry as Darcy: top-left inlet, bottom-right outlet, and walls.
+- `run_poiseuille_navier_stokes_experiment(...)` keeps the historical API name but now trains a small velocity-pressure field on the same shared unit-square patch geometry as Darcy and compares it to a Navier-Stokes manufactured streamfunction reference.
 - `run_stokes_experiment(...)` and `run_oseen_experiment(...)` use the same shared-patch boundary setup so the vector-flow comparisons are no longer horizontal channel-flow artifacts.
-- The vector experiments save reference `u`, `v`, and pressure fields from the shared-patch finite-difference pressure/velocity reference used to make the Darcy geometry visible in all model panels.
+- The vector experiments save reference `u`, `v`, pressure, speed, and residual-diagnostic fields from their model-specific manufactured references.
 - Current reference metadata is:
 
 | Model | Reference generator | PDE represented | Reference kind |
@@ -267,7 +267,7 @@ Phases 8-10 add `pinn_fluid.experiments` for lightweight local comparisons as ph
 | Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
 | Stokes | `stokes_streamfunction_reference` | Stokes incompressible momentum and continuity | manufactured |
 | Oseen | `oseen_streamfunction_reference` | Oseen incompressible momentum and continuity | manufactured |
-| Navier-Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+| Navier-Stokes | `navier_stokes_streamfunction_reference` | Navier-Stokes incompressible momentum and continuity | manufactured |
 
 All four references use the Cartesian unit-square convention: `x` increases left-to-right, `y=0` is bottom, `y=1` is top, the inlet is the top-left horizontal patch, and the outlet is the bottom-right horizontal patch. Grid coordinates flatten in x-major order with y varying fastest, while plotting reshapes fields with `reshape(grid_points, grid_points).T` and `origin="lower"`.
 - `run_all_experiments(...)` runs Darcy, Stokes, Oseen, and Navier-Stokes in order and writes a consolidated JSON and Markdown report.
@@ -583,12 +583,47 @@ Reference generators after this phase:
 | Oseen | `oseen_streamfunction_reference` | Oseen incompressible momentum and continuity | manufactured |
 | Navier-Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
 
-Limitations: the Oseen reference is manufactured for deterministic model-specific comparison and residual diagnostics, not an external CFD validation dataset. Navier-Stokes remains on the Darcy-derived demo-only vector reference until Phase 19.
+Limitations: the Oseen reference is manufactured for deterministic model-specific comparison and residual diagnostics, not an external CFD validation dataset. Phase 19 subsequently replaces the Navier-Stokes demo-only vector reference.
 
 Verification and reproduction commands:
 
 ```bash
 python -m pytest tests/test_phase18_oseen_reference.py
+python -m pytest
+git diff --check
+PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
+PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
+```
+
+## Phase 19 Navier-Stokes Model-Specific Ground Truth
+
+Phase 19 wires the existing backward-compatible `run_poiseuille_navier_stokes_experiment(...)` API to a deterministic manufactured Navier-Stokes streamfunction reference on the shared unit-square geometry. The reference uses the same top-left downward inlet, bottom-right downward outlet, and no-slip horizontal solid-wall behavior as the Stokes and Oseen references, then evaluates the nonlinear steady Navier-Stokes residual diagnostics with the existing `navier_stokes_residuals(...)` helper.
+
+Navier-Stokes `fields.npz` now includes:
+
+- `reference_u`, `reference_v`, `reference_pressure`
+- `reference_speed`
+- `reference_continuity`, `reference_x_momentum`, `reference_y_momentum`
+- `reference_residual`
+- `reference_metadata_json`
+
+Navier-Stokes `metrics.json` now includes finite PINN comparison metrics plus `reference_continuity_rms` and `reference_momentum_rms`.
+
+Reference generators after this phase:
+
+| Model | Reference generator | PDE represented | Reference kind |
+| --- | --- | --- | --- |
+| Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
+| Stokes | `stokes_streamfunction_reference` | Stokes incompressible momentum and continuity | manufactured |
+| Oseen | `oseen_streamfunction_reference` | Oseen incompressible momentum and continuity | manufactured |
+| Navier-Stokes | `navier_stokes_streamfunction_reference` | Navier-Stokes incompressible momentum and continuity | manufactured |
+
+Limitations: the Navier-Stokes reference is manufactured for deterministic model-specific comparison and residual diagnostics, not an external CFD validation dataset or a final physical benchmark. Phase 21 remains reserved for a dedicated OpenFOAM, FEniCS, FiPy, SciPy, or similar reference-solver integration.
+
+Verification and reproduction commands:
+
+```bash
+python -m pytest tests/test_phase19_navier_stokes_reference.py
 python -m pytest
 git diff --check
 PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
@@ -632,6 +667,6 @@ python -m pytest
 
 ## Continuing The Model Phases
 
-The remaining research work is to finish the Navier-Stokes model-specific reference, run broader comparison studies with selected grid sizes and training budgets, then add a dedicated external CFD/scientific-computing reference-solver phase for validation-quality benchmarks. Keep those studies separate from the lightweight regression-oriented defaults in `pinn_fluid.experiments`.
+The remaining research work is to run broader comparison studies with selected grid sizes and training budgets, then add a dedicated external CFD/scientific-computing reference-solver phase for validation-quality benchmarks. Keep those studies separate from the lightweight regression-oriented defaults in `pinn_fluid.experiments`.
 
 New agents should start with this `README.md` and `progress.md`. Continue the established style: tests first, narrow implementation, docs/progress update, fresh verification, Lore commit, then push `origin main` with the temp gitdir/worktree command when needed. Split the result-procurement work into staged phases rather than trying to produce the full study in one pass.

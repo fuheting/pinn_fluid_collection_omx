@@ -107,11 +107,11 @@ def test_experiment_results_and_artifacts_record_reference_metadata(tmp_path):
         "reference_kind": "finite-difference",
     }
     assert metadata_by_model["navier_stokes"] == {
-        "reference_generator_name": "shared_patch_vector_reference_from_fd_darcy",
-        "pde_model_represented": "Darcy pressure Laplace equation with velocity from negative pressure gradient",
-        "boundary_condition_type": "Darcy pressure Dirichlet inlet/outlet with no-normal-flow walls",
+        "reference_generator_name": "navier_stokes_streamfunction_reference",
+        "pde_model_represented": "Navier-Stokes incompressible momentum and continuity",
+        "boundary_condition_type": "manufactured velocity inlet/outlet with no-slip horizontal solid walls",
         "coordinate_convention": EXPECTED_COORDINATE_CONVENTION,
-        "reference_kind": "demo-only",
+        "reference_kind": "manufactured",
     }
 
     for result in results:
@@ -119,30 +119,24 @@ def test_experiment_results_and_artifacts_record_reference_metadata(tmp_path):
             assert json.loads(str(fields["reference_metadata_json"])) == result.reference_metadata
 
 
-def test_vector_experiments_save_the_same_darcy_derived_reference_fields(tmp_path):
+def test_legacy_shared_patch_vector_reference_remains_available_for_contract_audit():
     config = ExperimentConfig(
-        output_dir=tmp_path,
         grid_points=5,
-        training_steps=4,
-        hidden_width=6,
-        hidden_layers=1,
-        learning_rate=0.03,
-        seed=4,
-        viscosity=0.25,
         darcy_reference_iterations=20,
     )
-
-    results = [run_poiseuille_navier_stokes_experiment(config)]
+    pressure, velocity = _fd_darcy_reference(
+        grid_points=config.grid_points,
+        iterations=config.darcy_reference_iterations,
+    )
     expected = _shared_patch_vector_reference(
         grid_points=config.grid_points,
         iterations=config.darcy_reference_iterations,
     )
 
-    for result in results:
-        with np.load(tmp_path / result.artifacts["fields_npz"]) as fields:
-            assert np.array_equal(fields["reference_u"], expected["u"])
-            assert np.array_equal(fields["reference_v"], expected["v"])
-            assert np.array_equal(fields["reference_pressure"], expected["pressure"])
+    assert np.array_equal(expected["pressure"], pressure)
+    assert np.array_equal(expected["velocity"], velocity)
+    assert np.array_equal(expected["u"], velocity[:, :1])
+    assert np.array_equal(expected["v"], velocity[:, 1:2])
 
 
 def test_procurement_manifest_records_reference_metadata(tmp_path):
@@ -165,7 +159,5 @@ def test_procurement_manifest_records_reference_metadata(tmp_path):
         assert entry["reference_metadata"]["coordinate_convention"] == EXPECTED_COORDINATE_CONVENTION
         if entry["model"] == "darcy":
             assert entry["reference_metadata"]["reference_kind"] == "finite-difference"
-        elif entry["model"] in {"stokes", "oseen"}:
+        elif entry["model"] in {"stokes", "oseen", "navier_stokes"}:
             assert entry["reference_metadata"]["reference_kind"] == "manufactured"
-        else:
-            assert entry["reference_metadata"]["reference_kind"] == "demo-only"

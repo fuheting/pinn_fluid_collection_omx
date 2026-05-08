@@ -1,4 +1,4 @@
-"""Tests for Darcy and shared-patch Navier-Stokes experiment vertical slices."""
+"""Tests for Darcy and Navier-Stokes experiment vertical slices."""
 
 import json
 
@@ -44,7 +44,7 @@ def test_darcy_experiment_saves_fields_history_residuals_and_metrics(tmp_path):
     assert (tmp_path / result.artifacts["field_plot_png"]).is_file()
 
 
-def test_navier_stokes_experiment_uses_shared_patch_boundary_reference(tmp_path):
+def test_navier_stokes_experiment_uses_model_specific_reference(tmp_path):
     config = ExperimentConfig(
         output_dir=tmp_path,
         grid_points=5,
@@ -59,7 +59,7 @@ def test_navier_stokes_experiment_uses_shared_patch_boundary_reference(tmp_path)
     result = run_poiseuille_navier_stokes_experiment(config)
 
     assert result.model == "navier_stokes"
-    assert result.reference == "shared_patch_unit_square_reference"
+    assert result.reference == "manufactured_navier_stokes_streamfunction"
     assert result.history.reduced
     assert set(result.history.components) == {
         "continuity",
@@ -78,7 +78,6 @@ def test_navier_stokes_experiment_uses_shared_patch_boundary_reference(tmp_path)
         field_data.files
     )
     assert field_data["coordinates"].shape == (25, 2)
-    reference_u = field_data["reference_u"].reshape(5, 5)
-    reference_v = field_data["reference_v"].reshape(5, 5)
-    assert not np.allclose(reference_v, 0.0)
-    assert not np.allclose(reference_u[:, 1], reference_u[:, 2])
+    assert {"reference_continuity", "reference_x_momentum", "reference_y_momentum"}.issubset(
+        field_data.files
+    )

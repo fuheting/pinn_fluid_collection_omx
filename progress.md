@@ -44,7 +44,7 @@ Explicitly not completed:
 | 16 | Darcy ground truth hardening | Complete |
 | 17 | Stokes model-specific manufactured ground truth | Complete |
 | 18 | Oseen model-specific ground truth | Complete |
-| 19 | Navier-Stokes model-specific ground truth | Planned |
+| 19 | Navier-Stokes model-specific ground truth | Complete |
 | 20 | True performance comparison run with model-specific actual fields | Planned |
 | 21 | Dedicated external CFD/scientific-computing reference solve with OpenFOAM, FEniCS, FiPy, or similar | Planned |
 
@@ -589,7 +589,7 @@ Completed in this pass:
 - Evaluated Oseen momentum residual diagnostics with a documented prescribed convection velocity `(peak_velocity, 0.0)`.
 - Wired `run_oseen_experiment(...)` to use `manufactured_oseen_streamfunction` instead of the Darcy-derived shared-patch vector reference.
 - Updated Oseen reference metadata to `oseen_streamfunction_reference`, PDE model `Oseen incompressible momentum and continuity`, kind `manufactured`, and the per-run convection velocity.
-- Preserved Navier-Stokes on the existing Darcy-derived demo-only vector reference.
+- Preserved Navier-Stokes on the existing Darcy-derived demo-only vector reference at the close of Phase 18.
 - Added tests for Oseen continuity behavior, momentum residual diagnostics, inlet/outlet/horizontal-wall boundary behavior, finite metrics, artifact schema compatibility, and figure-generation compatibility.
 - Updated `README.md` with the Phase 18 artifact schema, active reference generators, limitations, and reproduction commands.
 
@@ -613,7 +613,7 @@ Limitations:
 
 - The Oseen reference is manufactured and deterministic; it is not external CFD validation data.
 - The prescribed convection velocity is fixed to `(peak_velocity, 0.0)` for this reference generator.
-- Navier-Stokes remains on the Phase 15 demo-only Darcy-derived vector reference until Phase 19.
+- Phase 19 subsequently replaces Navier-Stokes with a manufactured model-specific reference.
 
 Verification:
 
@@ -625,6 +625,56 @@ Reproduction commands:
 
 ```bash
 python -m pytest tests/test_phase18_oseen_reference.py
+PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
+PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
+```
+
+## Phase 19: Navier-Stokes Model-Specific Ground Truth
+
+Status: complete.
+
+Completed in this pass:
+
+- Added `_navier_stokes_reference_fields(...)`, a deterministic manufactured Navier-Stokes streamfunction reference on the shared unit-square geometry.
+- Built the reference from a streamfunction so continuity is zero up to numerical/autograd precision.
+- Evaluated nonlinear Navier-Stokes momentum residual diagnostics with the existing `navier_stokes_residuals(...)` helper.
+- Wired the existing backward-compatible `run_poiseuille_navier_stokes_experiment(...)` API to use `manufactured_navier_stokes_streamfunction` instead of the Darcy-derived shared-patch vector reference.
+- Updated Navier-Stokes reference metadata to `navier_stokes_streamfunction_reference`, PDE model `Navier-Stokes incompressible momentum and continuity`, and kind `manufactured`.
+- Added tests for Navier-Stokes continuity behavior, nonlinear momentum residual diagnostics, inlet/outlet/horizontal-wall boundary behavior, finite metrics, artifact schema compatibility, and figure-generation compatibility.
+- Updated `README.md` with the Phase 19 artifact schema, active reference generators, limitations, and reproduction commands.
+
+Current reference generators:
+
+| Model | Reference generator | PDE represented | Reference kind |
+| --- | --- | --- | --- |
+| Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
+| Stokes | `stokes_streamfunction_reference` | Stokes incompressible momentum and continuity | manufactured |
+| Oseen | `oseen_streamfunction_reference` | Oseen incompressible momentum and continuity | manufactured |
+| Navier-Stokes | `navier_stokes_streamfunction_reference` | Navier-Stokes incompressible momentum and continuity | manufactured |
+
+Artifacts produced by current Navier-Stokes experiments:
+
+- `fields.npz` with coordinates, predicted/reference `u`, `v`, pressure, reference speed, reference continuity, reference x/y momentum residuals, reference residual magnitude, PINN residual magnitude, and `reference_metadata_json`.
+- `history.json` with total and component-wise training histories.
+- `metrics.json` with `pressure_l2`, `velocity_l2`, `residual_rms`, `reference_continuity_rms`, and `reference_momentum_rms`.
+- Figure bundles continue to generate Navier-Stokes field panels, scalar fields, convergence panels, and pressure-velocity quiver diagnostics from the saved artifact schema.
+
+Limitations:
+
+- The Navier-Stokes reference is manufactured and deterministic; it is not external CFD validation data.
+- The manufactured field is intended as a model-specific comparison target and diagnostic reference, not a final physical benchmark for publication-grade accuracy claims.
+- Phase 21 remains reserved for a dedicated OpenFOAM, FEniCS, FiPy, SciPy, or similar reference-solver integration.
+
+Verification:
+
+- `python -m pytest tests/test_phase19_navier_stokes_reference.py tests/test_phase18_oseen_reference.py tests/test_phase15_reference_contracts.py tests/test_phase10_consolidated_experiments.py tests/test_phase9_vertical_slice_experiments.py` first failed because `_navier_stokes_reference_fields` did not exist and Navier-Stokes still reported `shared_patch_unit_square_reference`.
+- After implementation and contract updates, the same targeted test set passed.
+- Final verification for the phase is `python -m pytest tests/test_phase19_navier_stokes_reference.py`, `python -m pytest`, and `git diff --check`.
+
+Reproduction commands:
+
+```bash
+python -m pytest tests/test_phase19_navier_stokes_reference.py
 PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
 PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
 ```
