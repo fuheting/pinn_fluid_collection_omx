@@ -271,6 +271,35 @@ def _fd_darcy_reference(grid_points: int, iterations: int) -> tuple[np.ndarray, 
     return pressure.reshape(-1, 1), velocity
 
 
+def _laplace_residual_grid(pressure: np.ndarray) -> np.ndarray:
+    grid_points = pressure.shape[0]
+    spacing = 1.0 / (grid_points - 1)
+    residual = np.zeros_like(pressure, dtype=np.float64)
+    residual[1:-1, 1:-1] = (
+        pressure[:-2, 1:-1]
+        + pressure[2:, 1:-1]
+        + pressure[1:-1, :-2]
+        + pressure[1:-1, 2:]
+        - 4.0 * pressure[1:-1, 1:-1]
+    ) / (spacing**2)
+    return residual.reshape(-1, 1)
+
+
+def _fd_darcy_reference_fields(grid_points: int, iterations: int) -> dict[str, np.ndarray]:
+    """Return named Darcy finite-difference reference fields and diagnostics."""
+
+    pressure, velocity = _fd_darcy_reference(grid_points, iterations)
+    pressure_grid = pressure.reshape(grid_points, grid_points)
+    return {
+        "pressure": pressure,
+        "velocity": velocity,
+        "u": velocity[:, :1],
+        "v": velocity[:, 1:2],
+        "speed": np.linalg.norm(velocity, axis=1, keepdims=True),
+        "residual": _laplace_residual_grid(pressure_grid),
+    }
+
+
 def _reference_metadata_json(metadata: dict[str, object]) -> str:
     return json.dumps(metadata, sort_keys=True)
 
@@ -314,7 +343,7 @@ def run_darcy_experiment(config: ExperimentConfig | None = None) -> ExperimentRe
     predicted_pressure = model(autograd_coordinates)
     predicted_velocity = darcy_velocity(predicted_pressure, autograd_coordinates)
     residual = laplace_residual(predicted_pressure, autograd_coordinates)
-    reference_pressure, reference_velocity = _fd_darcy_reference(
+    reference_fields = _fd_darcy_reference_fields(
         active.grid_points,
         active.darcy_reference_iterations,
     )
@@ -322,11 +351,13 @@ def run_darcy_experiment(config: ExperimentConfig | None = None) -> ExperimentRe
 
     predicted_pressure_np = predicted_pressure.detach().numpy()
     predicted_velocity_np = predicted_velocity.detach().numpy()
+    predicted_speed_np = np.linalg.norm(predicted_velocity_np, axis=1, keepdims=True)
     residual_np = residual.detach().numpy()
     metrics = {
-        "pressure_l2": _pressure_l2(predicted_pressure_np, reference_pressure),
-        "velocity_l2": _velocity_l2(predicted_velocity_np, reference_velocity),
+        "pressure_l2": _pressure_l2(predicted_pressure_np, reference_fields["pressure"]),
+        "velocity_l2": _velocity_l2(predicted_velocity_np, reference_fields["velocity"]),
         "residual_rms": float(np.sqrt(np.mean(residual_np**2))),
+        "reference_residual_rms": float(np.sqrt(np.mean(reference_fields["residual"] ** 2))),
     }
 
     fields_path = model_dir / "fields.npz"
@@ -338,9 +369,16 @@ def run_darcy_experiment(config: ExperimentConfig | None = None) -> ExperimentRe
         fields_path,
         coordinates=coordinates.numpy(),
         predicted_pressure=predicted_pressure_np,
-        reference_pressure=reference_pressure,
+        reference_pressure=reference_fields["pressure"],
         predicted_velocity=predicted_velocity_np,
-        reference_velocity=reference_velocity,
+        reference_velocity=reference_fields["velocity"],
+        predicted_u=predicted_velocity_np[:, :1],
+        predicted_v=predicted_velocity_np[:, 1:2],
+        predicted_speed=predicted_speed_np,
+        reference_u=reference_fields["u"],
+        reference_v=reference_fields["v"],
+        reference_speed=reference_fields["speed"],
+        reference_residual=reference_fields["residual"],
         residual=residual_np,
         reference_metadata_json=_reference_metadata_json(reference_metadata),
     )
@@ -623,6 +661,7 @@ __all__ = [
     "COORDINATE_CONVENTION_METADATA",
     "DARCY_REFERENCE_METADATA",
     "SHARED_PATCH_VECTOR_REFERENCE_METADATA",
+    "_fd_darcy_reference_fields",
     "run_all_experiments",
     "run_darcy_experiment",
     "run_oseen_experiment",

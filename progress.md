@@ -41,6 +41,7 @@ Explicitly not completed:
 | 13 | Local sanity and paper-demo result runs | Complete |
 | 14 | Result-procurement documentation, figure inventory, and limitations | Complete |
 | 15 | Reference-generation audit and metadata contracts | Complete |
+| 16 | Darcy ground truth hardening | Complete |
 
 ## Phase 2: Darcy Flow
 
@@ -465,6 +466,58 @@ Reproduction commands:
 
 ```bash
 python -m pytest tests/test_phase15_reference_contracts.py
+PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
+PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
+```
+
+## Phase 16: Darcy Ground Truth Hardening
+
+Status: complete.
+
+Completed in this pass:
+
+- Reviewed `_fd_darcy_reference(...)` against the required Cartesian unit-square convention, top-left pressure inlet, bottom-right pressure outlet, and no-normal-flow walls.
+- Added tests for Darcy pressure extrema on the inlet/outlet patches.
+- Added tests showing the Darcy velocity points from the high-pressure inlet toward the low-pressure outlet through the interior.
+- Added tests for no-normal-flow wall behavior away from inlet/outlet openings.
+- Added `_fd_darcy_reference_fields(...)` to expose named pressure, velocity, `u`, `v`, speed, and finite-difference residual diagnostics.
+- Updated Darcy experiment artifacts to save `reference_u`, `reference_v`, `reference_speed`, `reference_residual`, `predicted_u`, `predicted_v`, and `predicted_speed` alongside the existing pressure, velocity, metadata, and residual arrays.
+- Added `reference_residual_rms` to Darcy metrics.
+- Updated Darcy figure generation to consume explicit component arrays when present while preserving compatibility with older `reference_velocity`/`predicted_velocity` artifacts.
+- Updated `README.md` with the Phase 16 artifact schema, active reference generators, limitations, and reproduction commands.
+
+Current reference generators:
+
+| Model | Reference generator | PDE represented | Reference kind |
+| --- | --- | --- | --- |
+| Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
+| Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+| Oseen | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+| Navier-Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+
+Artifacts produced by current Darcy experiments:
+
+- `fields.npz` with coordinates, predicted/reference pressure, predicted/reference velocity, explicit predicted/reference `u` and `v`, predicted/reference speed, PINN residual, finite-difference reference residual, and `reference_metadata_json`.
+- `history.json` with total and component-wise training histories.
+- `metrics.json` with `pressure_l2`, `velocity_l2`, `residual_rms`, and `reference_residual_rms`.
+- Figure bundles continue to read Darcy `fields.npz` and generate pressure, `u`, `v`, residual, convergence, and quiver diagnostics.
+
+Limitations:
+
+- Phase 16 hardens only Darcy actual fields.
+- Stokes, Oseen, and Navier-Stokes still use the Phase 15 demo-only Darcy-derived vector reference.
+- The Darcy reference is a lightweight in-repo finite-difference solve, not external CFD validation data.
+
+Verification:
+
+- `python -m pytest tests/test_phase16_darcy_ground_truth.py` first failed on missing `_fd_darcy_reference_fields` and missing explicit Darcy artifact fields.
+- After implementation, `python -m pytest tests/test_phase16_darcy_ground_truth.py` passed.
+- Final verification for the phase is `python -m pytest tests/test_phase16_darcy_ground_truth.py`, `python -m pytest`, and `git diff --check`.
+
+Reproduction commands:
+
+```bash
+python -m pytest tests/test_phase16_darcy_ground_truth.py
 PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
 PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
 ```

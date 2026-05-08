@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-The current phase test-locks the existing reference-generation behavior before model-specific actual fields are introduced. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, summary metrics, and explicit reference metadata, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, and a documented inventory of the locally procured paper-demo bundle.
+The current phase hardens the Darcy finite-difference actual field before model-specific vector-flow references are introduced. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, summary metrics, and explicit reference metadata, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, and a documented inventory of the locally procured paper-demo bundle.
 
 ## Planned Phases
 
@@ -33,6 +33,7 @@ The current phase test-locks the existing reference-generation behavior before m
 | 13 | Local sanity and paper-demo result runs | Complete |
 | 14 | Result-procurement documentation, figure inventory, and limitations | Complete |
 | 15 | Reference-generation audit and metadata contracts | Complete |
+| 16 | Darcy ground truth hardening | Complete |
 
 ## Repository Layout
 
@@ -250,7 +251,7 @@ Phases 8-10 add `pinn_fluid.experiments` for lightweight local comparisons as ph
 - `TrainingHistory` records total objective values and per-loss-component histories for every optimizer iteration.
 - `ExperimentResult` stores model name, reference source, grid shape, metrics, and artifact paths.
 - `ExperimentResult` stores reference metadata with the generator name, PDE model represented by the reference, boundary condition type, coordinate convention, and reference kind.
-- `run_darcy_experiment(...)` trains a small Darcy pressure field and compares it to an in-repo finite-difference Laplace reference on a deterministic grid.
+- `run_darcy_experiment(...)` trains a small Darcy pressure field and compares it to an in-repo finite-difference Laplace reference on a deterministic grid. The Darcy actual field now exposes pressure, `u`, `v`, speed, and a finite-difference Laplace residual diagnostic.
 - `run_poiseuille_navier_stokes_experiment(...)` keeps the historical API name but now trains a small velocity-pressure field on the same shared unit-square patch geometry as Darcy: top-left inlet, bottom-right outlet, and walls.
 - `run_stokes_experiment(...)` and `run_oseen_experiment(...)` use the same shared-patch boundary setup so the vector-flow comparisons are no longer horizontal channel-flow artifacts.
 - The vector experiments save reference `u`, `v`, and pressure fields from the shared-patch finite-difference pressure/velocity reference used to make the Darcy geometry visible in all model panels.
@@ -270,6 +271,7 @@ Each experiment writes reproducible numeric artifacts under the configured outpu
 
 - `fields.npz` with grid coordinates, PINN-predicted fields, reference fields, and residual fields
 - `fields.npz` also includes `reference_metadata_json` so each field bundle records its reference source and coordinate convention
+- Darcy `fields.npz` includes `reference_pressure`, `reference_velocity`, `reference_u`, `reference_v`, `reference_speed`, `reference_residual`, `predicted_u`, `predicted_v`, `predicted_speed`, and the PINN residual field `residual`
 - `history.json` with total and component-wise objective histories
 - `metrics.json` with finite L2/RMS comparison metrics
 - loss-history and field plot artifacts
@@ -480,6 +482,39 @@ git diff --check
 Artifact and figure regeneration still use the existing commands:
 
 ```bash
+PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
+PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
+```
+
+## Phase 16 Darcy Ground Truth Hardening
+
+Phase 16 keeps the shared unit-square top-left inlet and bottom-right outlet geometry and hardens only the Darcy actual field. The finite-difference Darcy reference remains `fd_darcy_reference`, representing the Darcy pressure Laplace equation with pressure Dirichlet inlet/outlet patches and no-normal-flow walls.
+
+The hardened Darcy contracts verify:
+
+- pressure extrema occur on the inlet and outlet pressure patches
+- Darcy velocity points from the high-pressure top-left inlet toward the low-pressure bottom-right outlet
+- wall-normal velocity is zero away from inlet/outlet openings
+- saved Darcy actual fields include pressure, `u`, `v`, speed, and finite-difference residual diagnostics
+- Darcy figure generation remains compatible with the explicit component fields
+
+Reference generators after this phase remain:
+
+| Model | Reference generator | PDE represented | Reference kind |
+| --- | --- | --- | --- |
+| Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
+| Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+| Oseen | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+| Navier-Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+
+Limitations remain narrow: Phase 16 does not introduce Stokes, Oseen, or Navier-Stokes model-specific actual fields, and it does not claim external CFD validation for the Darcy finite-difference solve.
+
+Verification and reproduction commands:
+
+```bash
+python -m pytest tests/test_phase16_darcy_ground_truth.py
+python -m pytest
+git diff --check
 PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
 PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
 ```

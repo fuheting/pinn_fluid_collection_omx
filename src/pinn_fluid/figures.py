@@ -240,17 +240,32 @@ def _darcy_panels(fields: np.lib.npyio.NpzFile) -> list[tuple[str, np.ndarray]]:
     reference_pressure = _scalar(fields["reference_pressure"])
     predicted_velocity = np.asarray(fields["predicted_velocity"], dtype=np.float64)
     reference_velocity = np.asarray(fields["reference_velocity"], dtype=np.float64)
+    predicted_u = _darcy_component(fields, "predicted_u", predicted_velocity, 0)
+    predicted_v = _darcy_component(fields, "predicted_v", predicted_velocity, 1)
+    reference_u = _darcy_component(fields, "reference_u", reference_velocity, 0)
+    reference_v = _darcy_component(fields, "reference_v", reference_velocity, 1)
     return [
         ("pressure predicted", predicted_pressure),
         ("pressure actual", reference_pressure),
         ("pressure residual", np.abs(predicted_pressure - reference_pressure)),
-        ("u predicted", _scalar(predicted_velocity[:, 0])),
-        ("u actual", _scalar(reference_velocity[:, 0])),
-        ("u residual", np.abs(_scalar(predicted_velocity[:, 0]) - _scalar(reference_velocity[:, 0]))),
-        ("v predicted", _scalar(predicted_velocity[:, 1])),
-        ("v actual", _scalar(reference_velocity[:, 1])),
-        ("v residual", np.abs(_scalar(predicted_velocity[:, 1]) - _scalar(reference_velocity[:, 1]))),
+        ("u predicted", predicted_u),
+        ("u actual", reference_u),
+        ("u residual", np.abs(predicted_u - reference_u)),
+        ("v predicted", predicted_v),
+        ("v actual", reference_v),
+        ("v residual", np.abs(predicted_v - reference_v)),
     ]
+
+
+def _darcy_component(
+    fields: np.lib.npyio.NpzFile,
+    key: str,
+    velocity: np.ndarray,
+    axis: int,
+) -> np.ndarray:
+    if key in fields:
+        return _scalar(fields[key])
+    return _scalar(velocity[:, axis])
 
 
 def _velocity_pressure_panels(fields: np.lib.npyio.NpzFile) -> list[tuple[str, np.ndarray]]:
@@ -278,10 +293,10 @@ def _darcy_separate_images(fields: np.lib.npyio.NpzFile) -> dict[str, tuple[str,
     reference_pressure = _scalar(fields["reference_pressure"])
     predicted_velocity = np.asarray(fields["predicted_velocity"], dtype=np.float64)
     reference_velocity = np.asarray(fields["reference_velocity"], dtype=np.float64)
-    predicted_u = _scalar(predicted_velocity[:, 0])
-    predicted_v = _scalar(predicted_velocity[:, 1])
-    actual_u = _scalar(reference_velocity[:, 0])
-    actual_v = _scalar(reference_velocity[:, 1])
+    predicted_u = _darcy_component(fields, "predicted_u", predicted_velocity, 0)
+    predicted_v = _darcy_component(fields, "predicted_v", predicted_velocity, 1)
+    actual_u = _darcy_component(fields, "reference_u", reference_velocity, 0)
+    actual_v = _darcy_component(fields, "reference_v", reference_velocity, 1)
     return {
         "predicted_p": ("Darcy predicted pressure", predicted_pressure),
         "actual_p": ("Darcy actual pressure", reference_pressure),
