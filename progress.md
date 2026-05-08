@@ -39,7 +39,7 @@ Explicitly not completed:
 | 11 | Result-procurement runner and manifest | Complete |
 | 12 | Figure-generation utilities for saved experiment artifacts | Complete |
 | 13 | Local sanity and paper-demo result runs | Complete |
-| 14 | Result-procurement documentation, figure inventory, and limitations | Planned |
+| 14 | Result-procurement documentation, figure inventory, and limitations | Complete |
 
 ## Phase 2: Darcy Flow
 
@@ -353,35 +353,40 @@ Notes:
 - The manifests record git commit `6c92946`, the local Phase 12 commit available when the temporary gitdir was unavailable in this shell.
 - These moderate results are procurement evidence only. They should not be used to rank physical accuracy or PINN effectiveness across models.
 
-## Next Result-Procurement Phases
+## Phase 14: Result Documentation And Figure Inventory
 
-Do not ask the next agent to complete the entire result study in one uninterrupted run. Preserve the phased style and make each phase testable.
+Status: complete.
 
-Recommended next phases:
+Completed in this pass:
 
-1. Phase 14: Update documentation with result-procurement commands, figure inventory, and known limitations from the actual run.
+- Updated `README.md` to mark Phase 14 complete and make the result-procurement handoff current.
+- Documented the actual Phase 13 sanity and paper-demo commands already used for local artifact procurement.
+- Documented the paper-demo cross-model metrics table from `data/experiments_paper_demo/summary/cross_model_report.md`.
+- Added a concrete paper-demo figure inventory for every required field and convergence panel.
+- Listed the numeric/report artifact locations for `run_manifest.json`, `figure_manifest.json`, cross-model reports, `fields.npz`, `history.json`, and `metrics.json`.
+- Recorded limitations that keep the moderate demo tier from being interpreted as final physical accuracy or model-ranking evidence.
+- Preserved the policy that generated outputs under `data/` remain ignored and uncommitted.
 
-Suggested initial run tiers:
+Final paper-demo figure inventory:
 
-- Sanity tier: `grid_points=9`, `training_steps=80`, `hidden_width=12`, `hidden_layers=1`, `learning_rate=0.02`.
-- Paper-demo tier: `grid_points=31`, `training_steps=800`, `hidden_width=24`, `hidden_layers=2`, `learning_rate=0.01`, `seed=0`, `viscosity=0.25`, `peak_velocity=1.0`, `darcy_reference_iterations=1200`.
-- If a paper-demo model does not reduce total history, rerun that tier with `learning_rate=0.005` and `training_steps=1200`.
+| Model | Field panel | Convergence panel |
+| --- | --- | --- |
+| Darcy | `data/experiments_paper_demo/figures/darcy_fields.png` | `data/experiments_paper_demo/figures/darcy_convergence.png` |
+| Stokes | `data/experiments_paper_demo/figures/stokes_fields.png` | `data/experiments_paper_demo/figures/stokes_convergence.png` |
+| Oseen | `data/experiments_paper_demo/figures/oseen_fields.png` | `data/experiments_paper_demo/figures/oseen_convergence.png` |
+| Navier-Stokes | `data/experiments_paper_demo/figures/navier_stokes_fields.png` | `data/experiments_paper_demo/figures/navier_stokes_convergence.png` |
 
-Minimum paper-demo outputs:
+Known limitations from the actual runs:
 
-- Per-model field panels for Darcy, Stokes, Oseen, and Navier-Stokes.
-- Per-model convergence panels showing total and component losses.
-- A cross-model metrics table derived from `summary/cross_model_report.json`.
-- A `run_manifest.json` that records git commit, config values, output directories, metric summary, and whether each history decreased.
+- The paper-demo run used one seed, one grid size, and one training budget.
+- The Darcy reference and Poiseuille channel reference are lightweight in-repo references, not external CFD validation datasets.
+- The moderate demo tier is suitable for paper-draft artifact procurement and workflow validation, not final accuracy claims.
+- Cross-model values should not be used to rank PINN effectiveness because the Darcy and channel-flow tasks are not equivalent benchmarks.
+- Generated `.npz`, `.json`, and `.png` outputs remain local under ignored `data/` directories.
 
-Non-goals for the next pass:
+## Continuing Guidance
 
-- Do not redefine the unit-square domain or residual APIs.
-- Do not claim final physical accuracy or rank PINN effectiveness from the moderate demo tier.
-- Do not commit generated experiment artifacts unless a later phase explicitly approves that policy change.
-- Do not add dependencies unless the existing declared dependencies are insufficient and the change is covered by tests.
-
-Required workflow for future phases:
+Required workflow for future phases or follow-up studies:
 
 - Read `README.md` and this file.
 - Inspect current model, solver, benchmark, and test patterns before editing.

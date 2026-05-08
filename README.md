@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-The current phase has procured local sanity and paper-demo experiment artifacts from the staged runner. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, and summary metrics, a manifest-writing procurement surface for staged local runs, and standalone figure panels generated from saved `fields.npz` and `history.json` artifacts.
+The current phase documents the completed local sanity and paper-demo result-procurement runs. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, and summary metrics, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, and a documented inventory of the locally procured paper-demo bundle.
 
 ## Planned Phases
 
@@ -31,7 +31,7 @@ The current phase has procured local sanity and paper-demo experiment artifacts 
 | 11 | Narrow result-procurement runner and manifest | Complete |
 | 12 | Figure-generation utilities for saved experiment artifacts | Complete |
 | 13 | Local sanity and paper-demo result runs | Complete |
-| 14 | Result-procurement documentation, figure inventory, and limitations | Planned |
+| 14 | Result-procurement documentation, figure inventory, and limitations | Complete |
 
 ## Repository Layout
 
@@ -278,12 +278,7 @@ PYTHONPATH=src python -m pinn_fluid.result_procurement \
   --work-tree /home/hfu_nestle/projects/pinn_fluid_omx
 ```
 
-Use the existing experiment API and this procurement runner to procure paper-draft figures and metrics in staged passes. Do not start with a long all-model run.
-
-Recommended sequence:
-
-1. Phase 14: document the actual result-procurement commands, figure inventory, generated artifact locations, and known limitations from the completed Phase 13 runs.
-2. Phase 14: generate or document a cross-model metrics table from `summary/cross_model_report.json`.
+Use the existing experiment API and this procurement runner to reproduce the Phase 13 paper-draft figures and metrics. Keep generated run outputs local unless the artifact policy changes explicitly.
 
 ## Figure Generation Handoff
 
@@ -359,12 +354,44 @@ Generated local artifact roots:
 
 Each root contains `run_manifest.json`, per-model `fields.npz`, `history.json`, `metrics.json`, raw single-field plots, `summary/cross_model_report.json`, `summary/cross_model_report.md`, and Phase 12 panels under `figures/`.
 
-Minimum paper-demo figure bundle:
+## Phase 14 Figure Inventory And Limits
+
+The Phase 13 paper-demo bundle in `data/experiments_paper_demo/` satisfies the minimum paper-demo figure inventory without committing generated files. The same file pattern exists for `data/experiments_sanity/`.
+
+Paper-demo figure inventory:
+
+| Model | Field panel | Convergence panel |
+| --- | --- | --- |
+| Darcy | `data/experiments_paper_demo/figures/darcy_fields.png` | `data/experiments_paper_demo/figures/darcy_convergence.png` |
+| Stokes | `data/experiments_paper_demo/figures/stokes_fields.png` | `data/experiments_paper_demo/figures/stokes_convergence.png` |
+| Oseen | `data/experiments_paper_demo/figures/oseen_fields.png` | `data/experiments_paper_demo/figures/oseen_convergence.png` |
+| Navier-Stokes | `data/experiments_paper_demo/figures/navier_stokes_fields.png` | `data/experiments_paper_demo/figures/navier_stokes_convergence.png` |
+
+Paper-demo numeric and report artifacts:
+
+- `data/experiments_paper_demo/run_manifest.json`
+- `data/experiments_paper_demo/figures/figure_manifest.json`
+- `data/experiments_paper_demo/summary/cross_model_report.json`
+- `data/experiments_paper_demo/summary/cross_model_report.md`
+- `data/experiments_paper_demo/{darcy,stokes,oseen,navier_stokes}/fields.npz`
+- `data/experiments_paper_demo/{darcy,stokes,oseen,navier_stokes}/history.json`
+- `data/experiments_paper_demo/{darcy,stokes,oseen,navier_stokes}/metrics.json`
+
+Minimum paper-demo figure bundle contents:
 
 - Darcy panel: predicted pressure, reference pressure, pressure error, predicted velocity magnitude, reference velocity magnitude, and residual magnitude.
 - Stokes/Oseen/Navier-Stokes panels: predicted `u`, `v`, speed, and pressure; reference `u`, `v`, speed, and pressure; scalar residual magnitude.
 - Convergence panels: total objective and every recorded loss component versus iteration for each model.
 - Cross-model table: final objective, velocity L2, pressure L2, and residual RMS.
+
+Known limitations:
+
+- The paper-demo tier is laptop-moderate procurement evidence, not a final convergence study.
+- The references are lightweight in-repo finite-difference Darcy and analytic Poiseuille channel fields, not external CFD validation data.
+- Stokes, Oseen, and Navier-Stokes use the same channel reference, so the table should not be read as a general model ranking.
+- Darcy and channel-flow velocity-pressure metrics are not physically equivalent benchmarks.
+- The run used one seed and one training budget; no uncertainty, sensitivity, or hyperparameter sweep is reported.
+- Generated `.npz`, `.json`, and `.png` artifacts are intentionally ignored under `data/` and are not part of the committed source tree.
 
 Keep generated outputs under ignored local paths such as `data/experiments_sanity/` and `data/experiments_paper_demo/`. Commit source, tests, and documentation only; do not commit generated `.npz`, `.json`, or `.png` experiment artifacts unless a future phase explicitly changes that policy.
 
