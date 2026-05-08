@@ -2,14 +2,12 @@
 
 import json
 
+import matplotlib.pyplot as plt
 import numpy as np
 
+import pinn_fluid.figures as figures
 from pinn_fluid.figures import (
-    _fallback_convergence_panel,
-    _fallback_field_panel,
-    _fallback_scalar_image,
     _save_scalar_field_image,
-    _turbo_rgb,
     generate_figure_bundle,
 )
 
@@ -37,36 +35,10 @@ def _assert_png(path) -> None:
 
 
 def _read_rgb_png(path):
-    import struct
-    import zlib
-
-    payload = path.read_bytes()
-    assert payload.startswith(b"\x89PNG\r\n\x1a\n")
-    offset = 8
-    width = height = None
-    compressed = bytearray()
-    while offset < len(payload):
-        length = struct.unpack(">I", payload[offset : offset + 4])[0]
-        kind = payload[offset + 4 : offset + 8]
-        data = payload[offset + 8 : offset + 8 + length]
-        offset += 12 + length
-        if kind == b"IHDR":
-            width, height, bit_depth, color_type, *_ = struct.unpack(">IIBBBBB", data)
-            assert bit_depth == 8
-            assert color_type == 2
-        elif kind == b"IDAT":
-            compressed.extend(data)
-        elif kind == b"IEND":
-            break
-    assert width is not None
-    raw = zlib.decompress(bytes(compressed))
-    rows = []
-    stride = width * 3
-    for row in range(height):
-        start = row * (stride + 1)
-        assert raw[start] == 0
-        rows.append(np.frombuffer(raw[start + 1 : start + 1 + stride], dtype=np.uint8).reshape(width, 3))
-    return np.stack(rows, axis=0)
+    image = plt.imread(path)
+    if image.dtype != np.uint8:
+        image = (image[:, :, :3] * 255).astype(np.uint8)
+    return image[:, :, :3]
 
 
 def _has_non_white_pixels(image, *, y_slice, x_slice) -> bool:
@@ -81,134 +53,39 @@ def _has_dark_pixels(image, *, y_slice, x_slice) -> bool:
 
 def _has_color_pixels(image, *, y_slice, x_slice, color) -> bool:
     region = image[y_slice, x_slice]
-    target = np.array(color, dtype=np.uint8)
-    return bool(np.any(np.all(region == target, axis=2)))
+    target = np.array(color, dtype=np.int16)
+    delta = np.abs(region.astype(np.int16) - target)
+    return bool(np.any(np.all(delta <= 20, axis=2)))
 
 
-def test_fallback_convergence_panel_draws_visible_title_axes_and_legend(tmp_path):
-    history = {
-        "total": [4.0, 2.0, 1.0],
-        "components": {
-            "boundary": [2.0, 1.0, 0.5],
-            "continuity": [1.0, 0.7, 0.4],
-        },
-    }
-    path = tmp_path / "fallback_convergence.png"
-
-    _fallback_convergence_panel(history, title="stokes convergence", path=path)
-
-    image = _read_rgb_png(path)
-    assert _has_non_white_pixels(image, y_slice=slice(4, 24), x_slice=slice(120, 300))
-    assert _has_non_white_pixels(image, y_slice=slice(225, 250), x_slice=slice(150, 260))
-    assert _has_non_white_pixels(image, y_slice=slice(45, 115), x_slice=slice(320, 415))
+def test_figure_generation_uses_matplotlib_without_fallback_renderer_symbols():
+    assert not hasattr(figures, "_fallback_scalar_image")
+    assert not hasattr(figures, "_fallback_field_panel")
+    assert not hasattr(figures, "_fallback_convergence_panel")
+    assert not hasattr(figures, "_fallback_pressure_velocity_quiver")
 
 
-def test_fallback_scalar_field_image_draws_visible_title_axes_and_colorbar(tmp_path):
-    path = tmp_path / "fallback_scalar.png"
+def test_scalar_field_image_draws_visible_title_axes_and_colorbar(tmp_path):
+    path = tmp_path / "scalar.png"
     values = np.linspace(0.0, 1.0, 9)
 
     _save_scalar_field_image(values, grid_points=3, title="Predicted u flow field", path=path)
 
     image = _read_rgb_png(path)
-    assert _has_non_white_pixels(image, y_slice=slice(4, 24), x_slice=slice(45, 170))
-    assert _has_non_white_pixels(image, y_slice=slice(105, 150), x_slice=slice(116, 155))
-    assert _has_non_white_pixels(image, y_slice=slice(118, 145), x_slice=slice(40, 90))
+    assert _has_non_white_pixels(image, y_slice=slice(20, 70), x_slice=slice(80, 300))
+    assert _has_non_white_pixels(image, y_slice=slice(300, 475), x_slice=slice(40, 120))
+    assert _has_non_white_pixels(image, y_slice=slice(80, 410), x_slice=slice(480, 570))
 
 
-def test_fallback_scalar_image_keeps_cartesian_y_up_orientation():
-    grid_points = 5
-    values = np.zeros(grid_points * grid_points)
-    values[0 * grid_points + (grid_points - 1)] = 10.0
-    values[0 * grid_points + 0] = 1.0
-
-    image = _fallback_scalar_image(values, grid_points, scale=1, limits=[0.0, 10.0])
-
-    assert image[0, 0].tolist() == _turbo_rgb(np.array(1.0)).tolist()
-    assert image[-1, 0].tolist() == _turbo_rgb(np.array(0.1)).tolist()
-
-
-def test_fallback_field_panel_draws_panel_titles_and_colorbars(tmp_path):
-    path = tmp_path / "fallback_fields.png"
-    values = np.linspace(0.0, 1.0, 9)
-
-    _fallback_field_panel(
-        [("predicted u", values), ("actual u", values[::-1])],
-        grid_points=3,
-        columns=2,
-        path=path,
-    )
-
-    image = _read_rgb_png(path)
-    assert _has_non_white_pixels(image, y_slice=slice(4, 24), x_slice=slice(8, 95))
-    assert _has_non_white_pixels(image, y_slice=slice(4, 24), x_slice=slice(190, 260))
-    assert _has_non_white_pixels(image, y_slice=slice(40, 95), x_slice=slice(124, 165))
-
-
-def test_fallback_field_panel_draws_comparison_headers_and_row_labels(tmp_path):
-    path = tmp_path / "fallback_comparison_fields.png"
-    values = np.linspace(0.0, 1.0, 9)
-
-    _fallback_field_panel(
-        [
-            ("u predicted", values),
-            ("u actual", values),
-            ("u residual", values),
-            ("pressure predicted", values),
-            ("pressure actual", values),
-            ("pressure residual", values),
-        ],
-        grid_points=3,
-        columns=3,
-        path=path,
-        column_labels=("predicted", "actual", "residual"),
-        row_labels=("u", "pressure"),
-    )
-
-    image = _read_rgb_png(path)
-    assert _has_dark_pixels(image, y_slice=slice(250, 274), x_slice=slice(120, 240))
-    assert _has_dark_pixels(image, y_slice=slice(250, 274), x_slice=slice(300, 390))
-    assert _has_dark_pixels(image, y_slice=slice(250, 274), x_slice=slice(500, 660))
-    assert _has_dark_pixels(image, y_slice=slice(48, 86), x_slice=slice(8, 48))
-    assert _has_dark_pixels(image, y_slice=slice(180, 220), x_slice=slice(8, 108))
-
-
-def test_fallback_scalar_field_image_places_colorbar_label_below_ticks(tmp_path):
-    path = tmp_path / "fallback_scalar_colorbar.png"
-    values = np.linspace(0.0, 1.0, 9)
-
-    _save_scalar_field_image(values, grid_points=3, title="Predicted u flow field", path=path)
-
-    image = _read_rgb_png(path)
-    assert _has_dark_pixels(image, y_slice=slice(112, 160), x_slice=slice(138, 220))
-
-
-def test_fallback_scalar_field_image_highlights_shared_inlet_and_outlet(tmp_path):
-    path = tmp_path / "fallback_scalar_boundaries.png"
+def test_scalar_field_image_highlights_shared_inlet_and_outlet(tmp_path):
+    path = tmp_path / "scalar_boundaries.png"
     values = np.linspace(0.0, 1.0, 16)
 
     _save_scalar_field_image(values, grid_points=4, title="Predicted u flow field", path=path)
 
     image = _read_rgb_png(path)
-    assert _has_color_pixels(image, y_slice=slice(30, 36), x_slice=slice(36, 66), color=(220, 0, 0))
-    assert _has_color_pixels(image, y_slice=slice(134, 142), x_slice=slice(118, 148), color=(0, 90, 255))
-
-
-def test_fallback_field_panel_highlights_shared_inlet_and_outlet_on_each_tile(tmp_path):
-    path = tmp_path / "fallback_panel_boundaries.png"
-    values = np.linspace(0.0, 1.0, 16)
-
-    _fallback_field_panel(
-        [("u predicted", values), ("u actual", values), ("u residual", values)],
-        grid_points=4,
-        columns=3,
-        path=path,
-        column_labels=("predicted", "actual", "residual"),
-        row_labels=("u",),
-    )
-
-    image = _read_rgb_png(path)
-    assert _has_color_pixels(image, y_slice=slice(8, 14), x_slice=slice(152, 182), color=(220, 0, 0))
-    assert _has_color_pixels(image, y_slice=slice(84, 90), x_slice=slice(212, 236), color=(0, 90, 255))
+    assert _has_color_pixels(image, y_slice=slice(45, 160), x_slice=slice(60, 230), color=(255, 0, 0))
+    assert _has_color_pixels(image, y_slice=slice(310, 470), x_slice=slice(295, 470), color=(0, 0, 255))
 
 
 def test_generate_figure_bundle_creates_darcy_field_and_convergence_panels(tmp_path):

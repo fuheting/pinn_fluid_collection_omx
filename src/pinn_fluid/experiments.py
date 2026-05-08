@@ -5,10 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
-import struct
 from typing import Callable
-import zlib
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
@@ -179,90 +181,7 @@ def _save_metrics(metrics: dict[str, float], path: Path) -> None:
     path.write_text(json.dumps(metrics, indent=2, sort_keys=True))
 
 
-def _write_rgb_png(path: Path, image: np.ndarray) -> None:
-    height, width, _ = image.shape
-    rows = [b"\x00" + image[row].astype(np.uint8).tobytes() for row in range(height)]
-    raw = b"".join(rows)
-
-    def chunk(kind: bytes, data: bytes) -> bytes:
-        return (
-            struct.pack(">I", len(data))
-            + kind
-            + data
-            + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
-        )
-
-    payload = b"\x89PNG\r\n\x1a\n"
-    payload += chunk("IHDR".encode(), struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
-    payload += chunk("IDAT".encode(), zlib.compress(raw))
-    payload += chunk("IEND".encode(), b"")
-    path.write_bytes(payload)
-
-
-def _draw_line(image: np.ndarray, start: tuple[int, int], end: tuple[int, int], color: tuple[int, int, int]) -> None:
-    x0, y0 = start
-    x1, y1 = end
-    dx = abs(x1 - x0)
-    dy = -abs(y1 - y0)
-    sx = 1 if x0 < x1 else -1
-    sy = 1 if y0 < y1 else -1
-    error = dx + dy
-    while True:
-        if 0 <= y0 < image.shape[0] and 0 <= x0 < image.shape[1]:
-            image[y0, x0] = color
-        if x0 == x1 and y0 == y1:
-            break
-        doubled = 2 * error
-        if doubled >= dy:
-            error += dy
-            x0 += sx
-        if doubled <= dx:
-            error += dx
-            y0 += sy
-
-
-def _fallback_history_png(history: TrainingHistory, path: Path) -> None:
-    image = np.full((220, 360, 3), 255, dtype=np.uint8)
-    series = [history.total] + [history.components[name] for name in history.component_names]
-    values = np.array([value for item in series for value in item], dtype=np.float64)
-    values = np.log10(np.clip(values, 1e-12, None))
-    low = float(values.min())
-    high = float(values.max())
-    span = high - low if high > low else 1.0
-    colors = [(0, 0, 0), (31, 119, 180), (214, 39, 40), (44, 160, 44), (148, 103, 189)]
-    for index, item in enumerate(series):
-        log_values = np.log10(np.clip(np.array(item, dtype=np.float64), 1e-12, None))
-        points = []
-        for step, value in enumerate(log_values):
-            x = 30 + round(step * 300 / max(1, len(log_values) - 1))
-            y = 190 - round((float(value) - low) * 160 / span)
-            points.append((x, y))
-        for start, end in zip(points, points[1:]):
-            _draw_line(image, start, end, colors[index % len(colors)])
-    _write_rgb_png(path, image)
-
-
-def _fallback_scalar_png(values: np.ndarray, grid_points: int, path: Path) -> None:
-    field = values.reshape(grid_points, grid_points).T
-    low = float(np.min(field))
-    high = float(np.max(field))
-    span = high - low if high > low else 1.0
-    normalized = ((field - low) / span * 255.0).astype(np.uint8)
-    image = np.stack((normalized, 255 - normalized, np.full_like(normalized, 128)), axis=2)
-    image = np.repeat(np.repeat(image, 18, axis=0), 18, axis=1)
-    _write_rgb_png(path, image)
-
-
 def _plot_history(history: TrainingHistory, path: Path) -> None:
-    try:
-        import matplotlib
-
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-    except ModuleNotFoundError:
-        _fallback_history_png(history, path)
-        return
-
     fig, axis = plt.subplots(figsize=(5, 3))
     axis.plot(history.total, label="total", linewidth=2)
     for name in history.component_names:
@@ -277,15 +196,6 @@ def _plot_history(history: TrainingHistory, path: Path) -> None:
 
 
 def _plot_scalar_field(values: np.ndarray, grid_points: int, title: str, path: Path) -> None:
-    try:
-        import matplotlib
-
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-    except ModuleNotFoundError:
-        _fallback_scalar_png(values, grid_points, path)
-        return
-
     fig, axis = plt.subplots(figsize=(4, 3))
     image = axis.imshow(values.reshape(grid_points, grid_points).T, origin="lower", extent=(0, 1, 0, 1))
     axis.set_title(title)

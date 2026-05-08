@@ -6,16 +6,14 @@ import argparse
 import json
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 
 from pinn_fluid.domains import boundary_collocation_points, interior_collocation_points
-from pinn_fluid.figures import (
-    BOUNDARY_MARKER_COLORS,
-    _draw_boundary_markers,
-    _draw_rect,
-    _draw_text,
-    _write_rgb_png,
-)
+from pinn_fluid.figures import BOUNDARY_MARKERS
 
 COORDINATE_CONVENTION = "cartesian_unit_square_y_up"
 COORDINATE_DESCRIPTION = "x increases left-to-right; y=0 is bottom; y=1 is top"
@@ -64,34 +62,6 @@ def boundary_diagnostic_report(
     }
 
 
-def _pixel(point: np.ndarray, *, left: int, top: int, size: int) -> tuple[int, int]:
-    x = left + round(float(point[0]) * size)
-    y = top + round((1.0 - float(point[1])) * size)
-    return x, y
-
-
-def _draw_points(
-    image: np.ndarray,
-    points: np.ndarray,
-    *,
-    left: int,
-    top: int,
-    size: int,
-    color: tuple[int, int, int],
-    radius: int,
-) -> None:
-    for point in points:
-        x, y = _pixel(point, left=left, top=top, size=size)
-        _draw_rect(
-            image,
-            x0=x - radius,
-            y0=y - radius,
-            x1=x + radius + 1,
-            y1=y + radius + 1,
-            color=color,
-        )
-
-
 def write_boundary_diagnostic_plot(
     path: Path | str,
     *,
@@ -114,25 +84,25 @@ def write_boundary_diagnostic_plot(
     outlet = _as_numpy(boundary["outlet"]["coordinates"])
     walls = _as_numpy(boundary["walls"]["coordinates"])
 
-    size = 320
-    top = 42
-    left = 58
-    image = np.full((430, 460, 3), 255, dtype=np.uint8)
-    _draw_text(image, "boundary masks", x=118, y=12, scale=2, bold=True)
-    _draw_rect(image, x0=left, y0=top, x1=left + size + 1, y1=top + 1, color=(0, 0, 0))
-    _draw_rect(image, x0=left, y0=top + size, x1=left + size + 1, y1=top + size + 1, color=(0, 0, 0))
-    _draw_rect(image, x0=left, y0=top, x1=left + 1, y1=top + size + 1, color=(0, 0, 0))
-    _draw_rect(image, x0=left + size, y0=top, x1=left + size + 1, y1=top + size + 1, color=(0, 0, 0))
-    _draw_boundary_markers(image, left=left, top=top, width=size, height=size, label_offset=12)
-    _draw_points(image, interior, left=left, top=top, size=size, color=(60, 60, 60), radius=2)
-    _draw_points(image, walls, left=left, top=top, size=size, color=(30, 160, 60), radius=3)
-    _draw_points(image, inlet, left=left, top=top, size=size, color=BOUNDARY_MARKER_COLORS["inlet"], radius=4)
-    _draw_points(image, outlet, left=left, top=top, size=size, color=BOUNDARY_MARKER_COLORS["outlet"], radius=4)
-    _draw_text(image, "x", x=left + size // 2, y=top + size + 18, scale=1)
-    _draw_text(image, "y", x=20, y=top + size // 2, scale=1)
-    _draw_text(image, COORDINATE_DESCRIPTION, x=58, y=392, scale=1)
-    _draw_text(image, "red inlet  blue outlet  green walls  gray interior", x=58, y=410, scale=1)
-    _write_rgb_png(output, image)
+    fig, axis = plt.subplots(figsize=(5.6, 5.2))
+    axis.scatter(interior[:, 0], interior[:, 1], color="0.35", s=16, label="interior")
+    axis.scatter(walls[:, 0], walls[:, 1], color="forestgreen", s=26, label="walls")
+    axis.scatter(inlet[:, 0], inlet[:, 1], color="red", s=38, label="inlet")
+    axis.scatter(outlet[:, 0], outlet[:, 1], color="blue", s=38, label="outlet")
+    axis.plot(BOUNDARY_MARKERS["inlet"]["x_range"], [1.0, 1.0], color="red", linewidth=4)
+    axis.plot(BOUNDARY_MARKERS["outlet"]["x_range"], [0.0, 0.0], color="blue", linewidth=4)
+    axis.set_title("Boundary masks")
+    axis.set_xlabel("x")
+    axis.set_ylabel("y")
+    axis.set_xlim(-0.05, 1.05)
+    axis.set_ylim(-0.05, 1.05)
+    axis.set_aspect("equal", adjustable="box")
+    axis.grid(True, linewidth=0.5, alpha=0.4)
+    axis.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize="small")
+    fig.text(0.12, 0.02, COORDINATE_DESCRIPTION, fontsize=8)
+    fig.tight_layout()
+    fig.savefig(output, dpi=140)
+    plt.close(fig)
 
     if report_path is not None:
         report_output = Path(report_path)

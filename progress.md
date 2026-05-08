@@ -311,10 +311,10 @@ Completed in this pass:
 - Added titled separate scalar images for Stokes/Oseen/Navier-Stokes predicted, actual, and residual/error `u`, `v`, pressure, speed, and residual-magnitude fields.
 - Added the `turbo` colormap, numeric min/mid/max colorbar values, field-panel layout metadata, convergence axes, titled convergence legends, and matching manifest metadata.
 - Added red shared-inlet and blue shared-outlet overlays to flow-field panels and separate scalar field images, with marker metadata in `figure_manifest.json`.
-- Moved field-panel predicted/actual/residual column labels to the bottom, increased and bolded row/column labels, and separated fallback colorbar labels from tick values.
+- Moved field-panel predicted/actual/residual column labels to the bottom, increased and bolded row/column labels, and separated colorbar labels from tick values.
 - Standardized field-panel and separate-image color limits so predicted and actual fields for the same variable share the same value range while residual/error fields keep a residual-specific range.
 - Added per-model pressure-velocity quiver diagnostics that overlay velocity arrows on pressure contours and preserve red/blue inlet/outlet markers.
-- Hardened the dependency-free PNG fallback so regenerated figures still show titles, axes, colorbars, and convergence legends when `matplotlib` is unavailable.
+- Made figure generation depend directly on `matplotlib>=3.8` instead of maintaining a dependency-free fallback renderer.
 - Wrote `figures/figure_manifest.json` with the generated panel paths.
 - Added tests that first failed on the missing `pinn_fluid.figures` module, then verified Darcy and velocity-pressure panels against small synthetic `fields.npz` and `history.json` fixtures.
 
@@ -414,9 +414,8 @@ Diagnosis:
 - The boundary point generation and mask definitions match the intended shared domain.
 - The solver boundary mask is correct for the intended geometry.
 - The `matplotlib` plotting path uses `origin="lower"` with the same `x, y` coordinate convention.
-- The dependency-free fallback PNG renderer was vertically inverted relative to Cartesian `y` up; it now flips the rasterized field so top-left inlet data renders at the top-left boundary marker.
-- Added a regression test that failed before the fallback orientation fix and now verifies a hot value at `(x=0, y=1)` renders at the top-left pixel.
-- Remaining physically suspicious extrema or structured residuals after regenerating fallback figures should be treated as reference/training/model-form limitations until the boundary-mask and quiver diagnostics show another coordinate mismatch.
+- Fallback rendering has been removed; missing `matplotlib` now surfaces as Python's normal import error.
+- Remaining physically suspicious extrema or structured residuals after regenerating figures should be treated as reference/training/model-form limitations until the boundary-mask and quiver diagnostics show another coordinate mismatch.
 
 ## Continuing Guidance
 
