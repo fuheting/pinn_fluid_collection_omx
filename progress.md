@@ -46,7 +46,7 @@ Explicitly not completed:
 | 18 | Oseen model-specific ground truth | Complete |
 | 19 | Navier-Stokes model-specific ground truth | Complete |
 | 20 | True performance comparison run with model-specific actual fields | Complete |
-| 21 | Dedicated external CFD/scientific-computing reference solve with OpenFOAM, FEniCS, FiPy, or similar | Planned |
+| 21 | Dedicated OpenFOAM reference case generation and field import | Complete |
 
 ## Phase 2: Darcy Flow
 
@@ -745,30 +745,81 @@ Verification:
 - After implementation, `python -m pytest tests/test_phase20_comparison_run_contracts.py tests/test_phase11_result_procurement.py` passed.
 - Final verification for the phase is `python -m pytest tests/test_phase20_comparison_run_contracts.py`, `python -m pytest`, and `git diff --check`.
 
-## Planned Phase 21: Dedicated Reference Solver Integration
+## Phase 21: Dedicated Reference Solver Integration
 
-Status: planned.
+Status: complete for OpenFOAM case generation and sampled-field import.
 
-Purpose:
+Solver-selection decision:
 
-- Add an external or dedicated scientific-computing solver reference after the lightweight in-repo model-specific references exist.
-- Candidate stacks include OpenFOAM, FEniCS, FiPy, SciPy-based finite-volume/finite-difference tooling, or another documented solver chosen through a small dependency and reproducibility review.
-- Use the dedicated solver as a validation layer for one or more precisely documented benchmark cases, not as an implicit replacement for the current regression-friendly references.
+- Selected OpenFOAM `simpleFoam` for the dedicated-solver phase, per the user direction to use OpenFOAM.
+- Did not add Python dependencies.
+- Local environment check found no `blockMesh`, `simpleFoam`, or `foamVersion` executables on `PATH`, and no usual local OpenFOAM installation under `/usr`, `/opt`, or `/home/hfu_nestle`.
+- Implemented the OpenFOAM case writer and sampled-field importer so the phase is testable without committing generated solver outputs or requiring OpenFOAM in CI.
 
-Required scope:
+Completed:
 
-- Write a solver-selection decision record covering installability, version, license, reproducibility, CI/local runtime cost, and data-import format.
-- Define the exact geometry, mesh, boundary conditions, material parameters, coordinate convention, and expected field variables.
-- Generate or import pressure, `u`, `v`, speed, and model-appropriate conservation/residual diagnostics.
-- Preserve existing artifact compatibility: `fields.npz`, `metrics.json`, `history.json`, `run_manifest.json`, figure manifests, field panels, convergence plots, and quiver diagnostics.
-- Add tests for importer orientation, flattening order, units/scaling, finite values, boundary masks, and schema compatibility.
-- Keep generated solver cases, meshes, logs, `.npz`, `.json`, and `.png` outputs under ignored `data/` paths unless explicitly approved for commit.
+- Added `pinn_fluid.dedicated_solvers`.
+- Added `OpenFOAMCaseConfig`, `write_openfoam_shared_domain_case(...)`, `import_openfoam_sampled_fields(...)`, and `run_openfoam_reference_import(...)`.
+- Generated an OpenFOAM `simpleFoam` case skeleton with:
+  - `0/U`
+  - `0/p`
+  - `constant/transportProperties`
+  - `system/blockMeshDict`
+  - `system/controlDict`
+  - `system/fvSchemes`
+  - `system/fvSolution`
+  - `system/sampleDict`
+  - `reference_metadata.json`
+- Preserved the repository coordinate convention in metadata: unit square, `y=0` bottom, `y=1` top, top-left inlet, bottom-right outlet, and existing flattening/plotting order.
+- Imported OpenFOAM raw sampled fields with columns `x y z p Ux Uy Uz` into the existing figure-compatible artifact schema.
+- Wrote artifact bundles for imported OpenFOAM samples:
+  - `dedicated_solver_manifest.json`
+  - `openfoam_darcy_reference/fields.npz`
+  - `openfoam_darcy_reference/history.json`
+  - `openfoam_darcy_reference/metrics.json`
+- Recorded reference metadata with:
+  - `reference_generator_name="openfoam_simplefoam_shared_domain"`
+  - `reference_kind="dedicated-solver"`
+  - `solver_stack="OpenFOAM simpleFoam"`
+  - expected sampled columns
+  - the shared coordinate convention
+- Added tests for generated OpenFOAM case files, metadata, coordinate orientation, flattening order, finite imported fields, artifact schema compatibility, and manifest reference-generator recording.
 
-Limitations to document when executed:
+Reference generators after Phase 21:
 
-- The first dedicated-solver phase should validate only the selected benchmark case.
-- It should not claim broad physical accuracy or model ranking beyond the solver settings, mesh, and training budget used.
-- It should record any mismatch between the shared unit-square inlet/outlet geometry and solver-native benchmark assumptions.
+- Darcy PINN experiment: `fd_darcy_reference`
+- Stokes PINN experiment: `stokes_streamfunction_reference`
+- Oseen PINN experiment: `oseen_streamfunction_reference`
+- Navier-Stokes PINN experiment: `navier_stokes_streamfunction_reference`
+- OpenFOAM dedicated bundle: `openfoam_simplefoam_shared_domain`
+
+Reproduction commands:
+
+```bash
+PYTHONPATH=src python -c "from pinn_fluid.dedicated_solvers import OpenFOAMCaseConfig, write_openfoam_shared_domain_case; write_openfoam_shared_domain_case('data/openfoam_phase21/case', OpenFOAMCaseConfig(grid_points=31, viscosity=0.25))"
+cd data/openfoam_phase21/case
+blockMesh
+simpleFoam
+postProcess -func sampleDict -latestTime
+PYTHONPATH=src python -c "from pinn_fluid.dedicated_solvers import run_openfoam_reference_import; run_openfoam_reference_import(output_dir='data/openfoam_phase21/imported', sample_path='data/openfoam_phase21/case/postProcessing/sample/latestTime/sharedDomainGrid_p_U.xy', grid_points=31)"
+PYTHONPATH=src python -c "from pinn_fluid.figures import generate_figure_bundle; generate_figure_bundle('data/openfoam_phase21/imported', models=('openfoam_darcy_reference',))"
+```
+
+Local Phase 21 artifact evidence is test-generated under temporary pytest directories. Real OpenFOAM case outputs, meshes, logs, `.npz`, `.json`, and `.png` outputs should stay under ignored `data/openfoam_phase21/` unless explicitly approved for commit.
+
+Limitations:
+
+- Phase 21 adds OpenFOAM case-generation and sampled-field import contracts, not a committed OpenFOAM solve result.
+- OpenFOAM was not installed locally, so `blockMesh`, `simpleFoam`, and `postProcess` were not executed.
+- It does not replace `run_all_experiments(...)` references or the regression-friendly finite-difference/manufactured references.
+- The generated OpenFOAM mesh uses whole top and bottom patches as an executable approximation while metadata preserves the intended top-left inlet and bottom-right outlet convention; a later phase should add a segmented OpenFOAM mesh before making physical validation claims.
+- The imported bundle mirrors OpenFOAM sample fields into `predicted_*` keys only to reuse existing figure-generation panels for a reference self-comparison.
+
+Verification:
+
+- `python -m pytest tests/test_phase21_dedicated_solver_reference.py` first failed because the interrupted SciPy module did not expose the OpenFOAM metadata/API.
+- After implementation, `python -m pytest tests/test_phase21_dedicated_solver_reference.py` passed.
+- Final verification for the phase is `python -m pytest tests/test_phase21_dedicated_solver_reference.py`, `python -m pytest`, and `git diff --check`.
 
 ## Continuing Guidance
 
