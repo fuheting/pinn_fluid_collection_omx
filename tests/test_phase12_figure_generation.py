@@ -7,7 +7,9 @@ import numpy as np
 from pinn_fluid.figures import (
     _fallback_convergence_panel,
     _fallback_field_panel,
+    _fallback_scalar_image,
     _save_scalar_field_image,
+    _turbo_rgb,
     generate_figure_bundle,
 )
 
@@ -111,6 +113,18 @@ def test_fallback_scalar_field_image_draws_visible_title_axes_and_colorbar(tmp_p
     assert _has_non_white_pixels(image, y_slice=slice(4, 24), x_slice=slice(45, 170))
     assert _has_non_white_pixels(image, y_slice=slice(105, 150), x_slice=slice(116, 155))
     assert _has_non_white_pixels(image, y_slice=slice(118, 145), x_slice=slice(40, 90))
+
+
+def test_fallback_scalar_image_keeps_cartesian_y_up_orientation():
+    grid_points = 5
+    values = np.zeros(grid_points * grid_points)
+    values[0 * grid_points + (grid_points - 1)] = 10.0
+    values[0 * grid_points + 0] = 1.0
+
+    image = _fallback_scalar_image(values, grid_points, scale=1, limits=[0.0, 10.0])
+
+    assert image[0, 0].tolist() == _turbo_rgb(np.array(1.0)).tolist()
+    assert image[-1, 0].tolist() == _turbo_rgb(np.array(0.1)).tolist()
 
 
 def test_fallback_field_panel_draws_panel_titles_and_colorbars(tmp_path):

@@ -326,7 +326,7 @@ After generating a figure bundle, inspect:
 - `figures/{model}_pressure_velocity_quiver.png` for pressure contours with velocity arrows.
 - `figures/figure_manifest.json` for `field_panel_color_limits`, `separate_field_images[*].color_limits`, and `boundary_markers`.
 
-If extrema still appear physically suspicious after these checks, treat that as a model/reference/training limitation rather than a plotting flip until the diagnostic mask and quiver plots show otherwise.
+If extrema still appear physically suspicious after these checks, first confirm whether the figures came from the dependency-free fallback renderer or the `matplotlib` renderer. The fallback renderer has a regression test that keeps Cartesian `y` up in PNG rows; this matters in environments where `matplotlib` is unavailable.
 
 ## Phase 13 Local Runs
 
@@ -388,7 +388,7 @@ Each root contains `run_manifest.json`, per-model `fields.npz`, `history.json`, 
 
 ## Phase 14 Figure Inventory And Limits
 
-The Phase 13 paper-demo bundle in `data/experiments_paper_demo/` satisfies the minimum paper-demo figure inventory without committing generated files. The same file pattern exists for `data/experiments_sanity/`. Regenerate the bundle with `PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo` after changing figure code. Flow-field comparison panels use predicted/actual/residual columns with bold bottom column labels and bold left row labels; flow-field figures use `turbo` with numeric colorbar values, shared predicted/actual color limits per variable, and red/blue inlet/outlet boundary markers. Convergence figures label the iteration and log-objective axes and include a titled loss-component legend. The fallback renderer preserves those visual annotations even in environments where `matplotlib` is not installed, with colorbar labels separated from tick values. Pressure-velocity quiver panels are generated for every model to show whether velocity arrows move from the red inlet toward the blue outlet.
+The Phase 13 paper-demo bundle in `data/experiments_paper_demo/` satisfies the minimum paper-demo figure inventory without committing generated files. The same file pattern exists for `data/experiments_sanity/`. Regenerate the bundle with `PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo` after changing figure code. Flow-field comparison panels use predicted/actual/residual columns with bold bottom column labels and bold left row labels; flow-field figures use `turbo` with numeric colorbar values, shared predicted/actual color limits per variable, and red/blue inlet/outlet boundary markers. Convergence figures label the iteration and log-objective axes and include a titled loss-component legend. The fallback renderer preserves those visual annotations even in environments where `matplotlib` is not installed, keeps Cartesian `y` up, and keeps colorbar labels separated from tick values. Pressure-velocity quiver panels are generated for every model to show whether velocity arrows move from the red inlet toward the blue outlet.
 
 Paper-demo figure inventory:
 

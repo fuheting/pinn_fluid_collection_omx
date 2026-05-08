@@ -412,8 +412,11 @@ Completed in this pass:
 Diagnosis:
 
 - The boundary point generation and mask definitions match the intended shared domain.
-- The plotting path uses `origin="lower"` with the same `x, y` coordinate convention; no vertical flip or `xy`/`ij` mismatch was found in the current reshape path.
-- Remaining physically suspicious extrema or structured residuals should be treated as reference/training/model-form limitations until the new boundary-mask and quiver diagnostics show an actual coordinate mismatch.
+- The solver boundary mask is correct for the intended geometry.
+- The `matplotlib` plotting path uses `origin="lower"` with the same `x, y` coordinate convention.
+- The dependency-free fallback PNG renderer was vertically inverted relative to Cartesian `y` up; it now flips the rasterized field so top-left inlet data renders at the top-left boundary marker.
+- Added a regression test that failed before the fallback orientation fix and now verifies a hot value at `(x=0, y=1)` renders at the top-left pixel.
+- Remaining physically suspicious extrema or structured residuals after regenerating fallback figures should be treated as reference/training/model-form limitations until the boundary-mask and quiver diagnostics show another coordinate mismatch.
 
 ## Continuing Guidance
 

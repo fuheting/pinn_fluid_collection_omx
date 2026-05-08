@@ -317,7 +317,7 @@ def _fallback_scalar_image(
     scale: int = 20,
     limits: list[float] | None = None,
 ) -> np.ndarray:
-    field = _reshape(values, grid_points)
+    field = np.flipud(_reshape(values, grid_points))
     low, high = _value_limits(field) if limits is None else [float(limits[0]), float(limits[1])]
     span = high - low if high > low else 1.0
     normalized = (field - low) / span
