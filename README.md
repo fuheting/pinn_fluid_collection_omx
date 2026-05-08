@@ -296,7 +296,9 @@ Generated Phase 12 figures:
 - Stokes/Oseen/Navier-Stokes field panels: predicted `u`, `v`, speed, and pressure; reference `u`, `v`, speed, and pressure; residual magnitude.
 - Separate scalar field images for Stokes/Oseen/Navier-Stokes predicted, actual, and residual/error `u`, `v`, and pressure fields.
 - Per-model convergence panels: total objective and every recorded component loss versus iteration.
-- Figure manifests include panel titles, convergence legend entries, and scalar colorbar labels.
+- Flow-field figures use the `turbo` colormap and include value colorbars with min/mid/max tick labels.
+- Convergence figures include axis labels, log-scaled objective values, and a titled legend for loss components.
+- Figure manifests include panel titles, convergence legend entries, convergence axes, colormap names, and scalar colorbar tick values.
 
 ## Phase 13 Local Runs
 
@@ -358,7 +360,7 @@ Each root contains `run_manifest.json`, per-model `fields.npz`, `history.json`, 
 
 ## Phase 14 Figure Inventory And Limits
 
-The Phase 13 paper-demo bundle in `data/experiments_paper_demo/` satisfies the minimum paper-demo figure inventory without committing generated files. The same file pattern exists for `data/experiments_sanity/`. Regenerate the bundle with `PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo` after changing figure code.
+The Phase 13 paper-demo bundle in `data/experiments_paper_demo/` satisfies the minimum paper-demo figure inventory without committing generated files. The same file pattern exists for `data/experiments_sanity/`. Regenerate the bundle with `PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo` after changing figure code. Flow-field figures use `turbo` with numeric colorbar values; convergence figures label the iteration and log-objective axes and include a titled loss-component legend.
 
 Paper-demo figure inventory:
 

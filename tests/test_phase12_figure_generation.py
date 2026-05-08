@@ -96,6 +96,12 @@ def test_generate_figure_bundle_creates_velocity_pressure_panels(tmp_path):
         "boundary",
         "continuity",
     ]
+    assert stokes_entry["convergence_axes"] == {
+        "x": "iteration",
+        "y": "objective",
+        "yscale": "log",
+    }
+    assert stokes_entry["convergence_legend_title"] == "loss components"
     _assert_png(tmp_path / stokes_entry["field_panel"])
     _assert_png(tmp_path / stokes_entry["convergence_panel"])
 
@@ -138,4 +144,7 @@ def test_generate_figure_bundle_creates_separate_predicted_actual_and_residual_i
     for key in expected_keys:
         assert separate[key]["title"]
         assert separate[key]["legend"] == "scalar value"
+        assert separate[key]["colormap"] == "turbo"
+        assert len(separate[key]["colorbar_ticks"]) == 3
+        assert separate[key]["colorbar_tick_labels"][0] == "0"
         _assert_png(tmp_path / separate[key]["path"])

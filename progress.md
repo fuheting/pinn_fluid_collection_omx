@@ -309,7 +309,7 @@ Completed in this pass:
 - Generated per-model field panels from `fields.npz`: Darcy pressure, velocity magnitude, pressure error, and residual magnitude; Stokes/Oseen/Navier-Stokes velocity components, speed, pressure, references, and residual magnitude.
 - Generated per-model convergence panels from `history.json` with the total objective and all recorded component losses.
 - Added titled separate scalar images for Stokes/Oseen/Navier-Stokes predicted, actual, and residual/error `u`, `v`, and pressure fields.
-- Added manifest metadata for figure titles, convergence legends, and scalar colorbar labels.
+- Added the `turbo` colormap, numeric min/mid/max colorbar values, convergence axes, titled convergence legends, and matching manifest metadata.
 - Wrote `figures/figure_manifest.json` with the generated panel paths.
 - Added tests that first failed on the missing `pinn_fluid.figures` module, then verified Darcy and velocity-pressure panels against small synthetic `fields.npz` and `history.json` fixtures.
 
@@ -367,6 +367,7 @@ Completed in this pass:
 - Added a concrete paper-demo figure inventory for every required field and convergence panel.
 - Listed the numeric/report artifact locations for `run_manifest.json`, `figure_manifest.json`, cross-model reports, `fields.npz`, `history.json`, and `metrics.json`.
 - Documented the separate predicted, actual, and residual/error scalar images for `u`, `v`, and pressure.
+- Documented that flow figures use `turbo` colorbars with values and that convergence figures include labeled axes plus a loss-component legend.
 - Recorded limitations that keep the moderate demo tier from being interpreted as final physical accuracy or model-ranking evidence.
 - Preserved the policy that generated outputs under `data/` remain ignored and uncommitted.
 

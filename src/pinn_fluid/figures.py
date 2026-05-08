@@ -12,6 +12,10 @@ import zlib
 import numpy as np
 
 MODEL_ORDER = ("darcy", "stokes", "oseen", "navier_stokes")
+FIELD_COLORMAP = "turbo"
+SCALAR_LEGEND = "scalar value"
+CONVERGENCE_AXES = {"x": "iteration", "y": "objective", "yscale": "log"}
+CONVERGENCE_LEGEND_TITLE = "loss components"
 
 
 def _load_history(path: Path) -> dict[str, object]:
@@ -45,6 +49,22 @@ def _magnitude(values: np.ndarray) -> np.ndarray:
 
 def _reshape(values: np.ndarray, grid_points: int) -> np.ndarray:
     return _scalar(values).reshape(grid_points, grid_points).T
+
+
+def _format_tick(value: float) -> str:
+    return f"{value:.6g}"
+
+
+def _colorbar_ticks(values: np.ndarray) -> list[float]:
+    flattened = _scalar(values)
+    low = float(np.min(flattened))
+    high = float(np.max(flattened))
+    middle = 0.5 * (low + high)
+    return [low, middle, high]
+
+
+def _colorbar_tick_labels(values: np.ndarray) -> list[str]:
+    return [_format_tick(value) for value in _colorbar_ticks(values)]
 
 
 def _write_rgb_png(path: Path, image: np.ndarray) -> None:
@@ -173,12 +193,16 @@ def _save_field_panel(
             _reshape(values, grid_points),
             origin="lower",
             extent=(0, 1, 0, 1),
+            cmap=FIELD_COLORMAP,
         )
         axis.set_title(panel_title, fontsize=9)
         axis.set_xticks([])
         axis.set_yticks([])
         colorbar = fig.colorbar(image, ax=axis, fraction=0.046, pad=0.04)
-        colorbar.set_label("scalar value", fontsize=8)
+        ticks = _colorbar_ticks(values)
+        colorbar.set_ticks(ticks)
+        colorbar.set_ticklabels(_colorbar_tick_labels(values))
+        colorbar.set_label(SCALAR_LEGEND, fontsize=8)
     for axis in flat_axes[len(panels) :]:
         axis.axis("off")
     fig.suptitle(title)
@@ -208,12 +232,16 @@ def _save_scalar_field_image(
         _reshape(values, grid_points),
         origin="lower",
         extent=(0, 1, 0, 1),
+        cmap=FIELD_COLORMAP,
     )
     axis.set_title(title)
     axis.set_xlabel("x")
     axis.set_ylabel("y")
     colorbar = fig.colorbar(image, ax=axis)
-    colorbar.set_label("scalar value")
+    ticks = _colorbar_ticks(values)
+    colorbar.set_ticks(ticks)
+    colorbar.set_ticklabels(_colorbar_tick_labels(values))
+    colorbar.set_label(SCALAR_LEGEND)
     fig.tight_layout()
     fig.savefig(path, dpi=140)
     plt.close(fig)
@@ -239,7 +267,7 @@ def _save_convergence_panel(history: dict[str, object], *, title: str, path: Pat
     axis.set_xlabel("iteration")
     axis.set_ylabel("objective")
     axis.set_yscale("log")
-    axis.legend(fontsize="x-small")
+    axis.legend(fontsize="x-small", title=CONVERGENCE_LEGEND_TITLE)
     fig.tight_layout()
     fig.savefig(path, dpi=140)
     plt.close(fig)
@@ -342,7 +370,10 @@ def _write_separate_images(
         images[key] = {
             "path": path.relative_to(root).as_posix(),
             "title": title,
-            "legend": "scalar value",
+            "legend": SCALAR_LEGEND,
+            "colormap": FIELD_COLORMAP,
+            "colorbar_ticks": _colorbar_ticks(values),
+            "colorbar_tick_labels": _colorbar_tick_labels(values),
         }
     return images
 
@@ -405,6 +436,8 @@ def generate_figure_bundle(
                 "convergence_panel": convergence_panel.relative_to(root).as_posix(),
                 "convergence_panel_title": convergence_panel_title,
                 "convergence_legend": _history_legend(history),
+                "convergence_axes": dict(CONVERGENCE_AXES),
+                "convergence_legend_title": CONVERGENCE_LEGEND_TITLE,
                 "separate_field_images": separate_field_images,
             }
         )
@@ -433,4 +466,4 @@ if __name__ == "__main__":
     main()
 
 
-__all__ = ["MODEL_ORDER", "generate_figure_bundle", "main"]
+__all__ = ["FIELD_COLORMAP", "MODEL_ORDER", "generate_figure_bundle", "main"]
