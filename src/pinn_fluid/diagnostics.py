@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from pinn_fluid.domains import boundary_collocation_points, interior_collocation_points
-from pinn_fluid.figures import BOUNDARY_MARKERS
+from pinn_fluid.figures import _draw_boundary_markers
 
 COORDINATE_CONVENTION = "cartesian_unit_square_y_up"
 COORDINATE_DESCRIPTION = "x increases left-to-right; y=0 is bottom; y=1 is top"
@@ -89,8 +89,7 @@ def write_boundary_diagnostic_plot(
     axis.scatter(walls[:, 0], walls[:, 1], color="forestgreen", s=26, label="walls")
     axis.scatter(inlet[:, 0], inlet[:, 1], color="red", s=38, label="inlet")
     axis.scatter(outlet[:, 0], outlet[:, 1], color="blue", s=38, label="outlet")
-    axis.plot(BOUNDARY_MARKERS["inlet"]["x_range"], [1.0, 1.0], color="red", linewidth=4)
-    axis.plot(BOUNDARY_MARKERS["outlet"]["x_range"], [0.0, 0.0], color="blue", linewidth=4)
+    _draw_boundary_markers(axis, linewidth=4)
     axis.set_title("Boundary masks")
     axis.set_xlabel("x")
     axis.set_ylabel("y")

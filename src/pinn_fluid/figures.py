@@ -23,6 +23,7 @@ BOUNDARY_MARKER_COLORS = {
     "inlet": (220, 0, 0),
     "outlet": (0, 90, 255),
 }
+BOUNDARY_MARKER_OFFSET = 0.035
 BOUNDARY_MARKERS = {
     "inlet": {
         "label": "inlet",
@@ -96,6 +97,29 @@ def _colorbar_tick_labels(values: np.ndarray, limits: list[float] | None = None)
     return [_format_tick(value) for value in _colorbar_ticks(values, limits)]
 
 
+def _draw_boundary_markers(axis, *, include_labels: bool = False, linewidth: float = 3.0) -> None:
+    inlet_label = BOUNDARY_MARKERS["inlet"]["label"] if include_labels else None
+    outlet_label = BOUNDARY_MARKERS["outlet"]["label"] if include_labels else None
+    axis.plot(
+        BOUNDARY_MARKERS["inlet"]["x_range"],
+        [1.0 + BOUNDARY_MARKER_OFFSET, 1.0 + BOUNDARY_MARKER_OFFSET],
+        color="red",
+        linewidth=linewidth,
+        solid_capstyle="butt",
+        clip_on=False,
+        label=inlet_label,
+    )
+    axis.plot(
+        BOUNDARY_MARKERS["outlet"]["x_range"],
+        [-BOUNDARY_MARKER_OFFSET, -BOUNDARY_MARKER_OFFSET],
+        color="blue",
+        linewidth=linewidth,
+        solid_capstyle="butt",
+        clip_on=False,
+        label=outlet_label,
+    )
+
+
 def _save_field_panel(
     panels: list[tuple[str, np.ndarray]],
     *,
@@ -125,20 +149,7 @@ def _save_field_panel(
             vmin=None if limits is None else limits[0],
             vmax=None if limits is None else limits[1],
         )
-        axis.plot(
-            BOUNDARY_MARKERS["inlet"]["x_range"],
-            [1.0, 1.0],
-            color="red",
-            linewidth=3,
-            solid_capstyle="butt",
-        )
-        axis.plot(
-            BOUNDARY_MARKERS["outlet"]["x_range"],
-            [0.0, 0.0],
-            color="blue",
-            linewidth=3,
-            solid_capstyle="butt",
-        )
+        _draw_boundary_markers(axis)
         if not column_labels:
             axis.set_title(panel_title, fontsize=9)
         else:
@@ -186,22 +197,7 @@ def _save_scalar_field_image(
         vmin=None if limits is None else limits[0],
         vmax=None if limits is None else limits[1],
     )
-    axis.plot(
-        BOUNDARY_MARKERS["inlet"]["x_range"],
-        [1.0, 1.0],
-        color="red",
-        linewidth=3,
-        solid_capstyle="butt",
-        label=BOUNDARY_MARKERS["inlet"]["label"],
-    )
-    axis.plot(
-        BOUNDARY_MARKERS["outlet"]["x_range"],
-        [0.0, 0.0],
-        color="blue",
-        linewidth=3,
-        solid_capstyle="butt",
-        label=BOUNDARY_MARKERS["outlet"]["label"],
-    )
+    _draw_boundary_markers(axis, include_labels=True)
     axis.set_title(title)
     axis.set_xlabel("x")
     axis.set_ylabel("y")
@@ -463,8 +459,7 @@ def _save_pressure_velocity_quiver(
             scale=20,
             width=0.004,
         )
-        axis.plot(BOUNDARY_MARKERS["inlet"]["x_range"], [1.0, 1.0], color="red", linewidth=3)
-        axis.plot(BOUNDARY_MARKERS["outlet"]["x_range"], [0.0, 0.0], color="blue", linewidth=3)
+        _draw_boundary_markers(axis)
         axis.set_title(f"{label} pressure + velocity")
         axis.set_xlabel("x")
         axis.set_ylabel("y")

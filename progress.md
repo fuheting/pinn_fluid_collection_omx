@@ -310,7 +310,8 @@ Completed in this pass:
 - Generated per-model convergence panels from `history.json` with the total objective and all recorded component losses.
 - Added titled separate scalar images for Stokes/Oseen/Navier-Stokes predicted, actual, and residual/error `u`, `v`, pressure, speed, and residual-magnitude fields.
 - Added the `turbo` colormap, numeric min/mid/max colorbar values, field-panel layout metadata, convergence axes, titled convergence legends, and matching manifest metadata.
-- Added red shared-inlet and blue shared-outlet overlays to flow-field panels and separate scalar field images, with marker metadata in `figure_manifest.json`.
+- Added red shared-inlet and blue shared-outlet markers to flow-field panels and separate scalar field images, with marker metadata in `figure_manifest.json`.
+- Moved the red/blue inlet/outlet marker lines just outside the unit-square domain so they no longer overlay the rendered flow field.
 - Moved field-panel predicted/actual/residual column labels to the bottom, increased and bolded row/column labels, and separated colorbar labels from tick values.
 - Standardized field-panel and separate-image color limits so predicted and actual fields for the same variable share the same value range while residual/error fields keep a residual-specific range.
 - Added per-model pressure-velocity quiver diagnostics that overlay velocity arrows on pressure contours and preserve red/blue inlet/outlet markers.

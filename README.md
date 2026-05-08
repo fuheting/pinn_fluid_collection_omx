@@ -300,7 +300,7 @@ Generated Phase 12 figures:
 - Field comparison panels place bold row labels on the left and bold predicted/actual/residual column labels below the columns.
 - Separate scalar field images for Stokes/Oseen/Navier-Stokes predicted, actual, and residual/error `u`, `v`, pressure, speed, and residual-magnitude fields.
 - Per-model convergence panels: total objective and every recorded component loss versus iteration.
-- Flow-field figures use the `turbo` colormap, include value colorbars with min/mid/max tick labels, and mark the shared inlet in red and outlet in blue.
+- Flow-field figures use the `turbo` colormap, include value colorbars with min/mid/max tick labels, and mark the shared inlet in red and outlet in blue just outside the unit-square domain so the field values remain unobscured.
 - Predicted and actual fields for the same variable share the same color range; residual/error panels keep their own residual range.
 - Per-model pressure-velocity quiver diagnostics overlay velocity arrows on pressure contours so the plotted flow direction can be checked against the red inlet and blue outlet.
 - Convergence figures include axis labels, log-scaled objective values, and a titled legend for loss components.
@@ -388,7 +388,7 @@ Each root contains `run_manifest.json`, per-model `fields.npz`, `history.json`, 
 
 ## Phase 14 Figure Inventory And Limits
 
-The Phase 13 paper-demo bundle in `data/experiments_paper_demo/` satisfies the minimum paper-demo figure inventory without committing generated files. The same file pattern exists for `data/experiments_sanity/`. Regenerate the bundle with `PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo` after changing figure code. Flow-field comparison panels use predicted/actual/residual columns with bold bottom column labels and bold left row labels; flow-field figures use `turbo` with numeric colorbar values, shared predicted/actual color limits per variable, and red/blue inlet/outlet boundary markers. Convergence figures label the iteration and log-objective axes and include a titled loss-component legend. Figure generation requires `matplotlib>=3.8`; without it, Python raises the normal import error. Pressure-velocity quiver panels are generated for every model to show whether velocity arrows move from the red inlet toward the blue outlet.
+The Phase 13 paper-demo bundle in `data/experiments_paper_demo/` satisfies the minimum paper-demo figure inventory without committing generated files. The same file pattern exists for `data/experiments_sanity/`. Regenerate the bundle with `PYTHONPATH=src python -m pinn_fluid.figures data/experiments_paper_demo` after changing figure code. Flow-field comparison panels use predicted/actual/residual columns with bold bottom column labels and bold left row labels; flow-field figures use `turbo` with numeric colorbar values, shared predicted/actual color limits per variable, and red/blue inlet/outlet boundary markers placed just outside the square. Convergence figures label the iteration and log-objective axes and include a titled loss-component legend. Figure generation requires `matplotlib>=3.8`; without it, Python raises the normal import error. Pressure-velocity quiver panels are generated for every model to show whether velocity arrows move from the red inlet toward the blue outlet.
 
 Paper-demo figure inventory:
 

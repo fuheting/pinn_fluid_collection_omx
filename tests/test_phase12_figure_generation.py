@@ -88,6 +88,33 @@ def test_scalar_field_image_highlights_shared_inlet_and_outlet(tmp_path):
     assert _has_color_pixels(image, y_slice=slice(310, 470), x_slice=slice(295, 470), color=(0, 0, 255))
 
 
+def test_scalar_field_image_places_boundary_markers_outside_domain(monkeypatch, tmp_path):
+    calls = []
+    original_plot = figures.matplotlib.axes.Axes.plot
+
+    def record_plot(axis, *args, **kwargs):
+        calls.append((args, kwargs))
+        return original_plot(axis, *args, **kwargs)
+
+    monkeypatch.setattr(figures.matplotlib.axes.Axes, "plot", record_plot)
+
+    _save_scalar_field_image(
+        np.linspace(0.0, 1.0, 16),
+        grid_points=4,
+        title="Predicted u flow field",
+        path=tmp_path / "scalar_boundaries_outside.png",
+    )
+
+    red_calls = [(args, kwargs) for args, kwargs in calls if kwargs.get("color") == "red"]
+    blue_calls = [(args, kwargs) for args, kwargs in calls if kwargs.get("color") == "blue"]
+    assert red_calls
+    assert blue_calls
+    assert all(y > 1.0 for y in red_calls[0][0][1])
+    assert all(y < 0.0 for y in blue_calls[0][0][1])
+    assert red_calls[0][1]["clip_on"] is False
+    assert blue_calls[0][1]["clip_on"] is False
+
+
 def test_generate_figure_bundle_creates_darcy_field_and_convergence_panels(tmp_path):
     model_dir = tmp_path / "darcy"
     model_dir.mkdir()
