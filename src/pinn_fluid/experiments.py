@@ -63,6 +63,14 @@ STOKES_REFERENCE_METADATA: dict[str, object] = {
     "reference_kind": "manufactured",
 }
 
+OSEEN_REFERENCE_METADATA: dict[str, object] = {
+    "reference_generator_name": "oseen_streamfunction_reference",
+    "pde_model_represented": "Oseen incompressible momentum and continuity",
+    "boundary_condition_type": "manufactured velocity inlet/outlet with no-slip horizontal solid walls",
+    "coordinate_convention": COORDINATE_CONVENTION_METADATA,
+    "reference_kind": "manufactured",
+}
+
 
 @dataclass(frozen=True)
 class TrainingHistory:
@@ -374,6 +382,69 @@ def _stokes_reference_fields(
     }
 
 
+def _oseen_reference_fields(
+    grid_points: int,
+    *,
+    viscosity: float,
+    peak_velocity: float,
+) -> dict[str, np.ndarray]:
+    """Return a deterministic manufactured Oseen streamfunction reference."""
+
+    coordinates = _grid_coordinates(grid_points).to(dtype=torch.float64).requires_grad_(True)
+    x = coordinates[:, :1]
+    y = coordinates[:, 1:2]
+    inlet_window = _smoothstep(x, 0.0, 0.25)
+    outlet_window = _smoothstep(x, 0.75, 1.0)
+    top_layer = _smoothstep(y, 0.55, 1.0)
+    bottom_layer = 1.0 - _smoothstep(y, 0.0, 0.45)
+    scale = peak_velocity / 6.0
+    streamfunction = scale * (inlet_window * top_layer + outlet_window * bottom_layer)
+    stream_gradient = torch.autograd.grad(
+        streamfunction,
+        coordinates,
+        grad_outputs=torch.ones_like(streamfunction),
+        create_graph=True,
+        retain_graph=True,
+    )[0]
+    u = stream_gradient[:, 1:2]
+    v = -stream_gradient[:, :1]
+    pressure = coordinates[:, :1] * 0.0
+    convection_velocity = torch.tensor(
+        (peak_velocity, 0.0),
+        dtype=coordinates.dtype,
+        device=coordinates.device,
+    ).reshape(1, 2).expand(coordinates.shape[0], 2)
+    residuals = oseen_residuals(
+        u,
+        v,
+        pressure,
+        coordinates,
+        convection_velocity,
+        viscosity=viscosity,
+    )
+    residual_magnitude = torch.sqrt(sum(value.square() for value in residuals.values()))
+    velocity = torch.cat((u, v), dim=1)
+
+    return {
+        "u": u.detach().numpy(),
+        "v": v.detach().numpy(),
+        "pressure": pressure.detach().numpy(),
+        "velocity": velocity.detach().numpy(),
+        "speed": torch.linalg.norm(velocity, dim=1, keepdim=True).detach().numpy(),
+        "continuity": residuals["continuity"].detach().numpy(),
+        "x_momentum": residuals["x_momentum"].detach().numpy(),
+        "y_momentum": residuals["y_momentum"].detach().numpy(),
+        "residual": residual_magnitude.detach().numpy(),
+        "convection_velocity": convection_velocity.detach().numpy(),
+    }
+
+
+def _oseen_reference_metadata(peak_velocity: float) -> dict[str, object]:
+    metadata = deepcopy(OSEEN_REFERENCE_METADATA)
+    metadata["convection_velocity"] = [float(peak_velocity), 0.0]
+    return metadata
+
+
 def run_darcy_experiment(config: ExperimentConfig | None = None) -> ExperimentResult:
     """Run the deterministic Darcy PINN/reference vertical-slice experiment."""
 
@@ -598,6 +669,7 @@ def _run_shared_patch_vector_experiment(
         ("x_momentum", "reference_x_momentum"),
         ("y_momentum", "reference_y_momentum"),
         ("residual", "reference_residual"),
+        ("convection_velocity", "reference_convection_velocity"),
     ):
         if source_key in reference_fields:
             field_payload[target_key] = reference_fields[source_key]
@@ -698,14 +770,15 @@ def run_oseen_experiment(config: ExperimentConfig | None = None) -> ExperimentRe
 
     return _run_shared_patch_vector_experiment(
         model_name="oseen",
-        reference="shared_patch_unit_square_reference",
+        reference="manufactured_oseen_streamfunction",
         config=active,
         residual_builder=residual_builder,
-        reference_builder=lambda: _shared_patch_vector_reference(
+        reference_builder=lambda: _oseen_reference_fields(
             active.grid_points,
-            active.darcy_reference_iterations,
+            viscosity=active.viscosity,
+            peak_velocity=active.peak_velocity,
         ),
-        reference_metadata=SHARED_PATCH_VECTOR_REFERENCE_METADATA,
+        reference_metadata=_oseen_reference_metadata(active.peak_velocity),
     )
 
 
@@ -754,9 +827,11 @@ __all__ = [
     "TrainingHistory",
     "COORDINATE_CONVENTION_METADATA",
     "DARCY_REFERENCE_METADATA",
+    "OSEEN_REFERENCE_METADATA",
     "SHARED_PATCH_VECTOR_REFERENCE_METADATA",
     "STOKES_REFERENCE_METADATA",
     "_fd_darcy_reference_fields",
+    "_oseen_reference_fields",
     "_stokes_reference_fields",
     "run_all_experiments",
     "run_darcy_experiment",

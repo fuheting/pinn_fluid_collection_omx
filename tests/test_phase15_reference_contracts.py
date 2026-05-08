@@ -106,14 +106,13 @@ def test_experiment_results_and_artifacts_record_reference_metadata(tmp_path):
         "coordinate_convention": EXPECTED_COORDINATE_CONVENTION,
         "reference_kind": "finite-difference",
     }
-    for model in ("oseen", "navier_stokes"):
-        assert metadata_by_model[model] == {
-            "reference_generator_name": "shared_patch_vector_reference_from_fd_darcy",
-            "pde_model_represented": "Darcy pressure Laplace equation with velocity from negative pressure gradient",
-            "boundary_condition_type": "Darcy pressure Dirichlet inlet/outlet with no-normal-flow walls",
-            "coordinate_convention": EXPECTED_COORDINATE_CONVENTION,
-            "reference_kind": "demo-only",
-        }
+    assert metadata_by_model["navier_stokes"] == {
+        "reference_generator_name": "shared_patch_vector_reference_from_fd_darcy",
+        "pde_model_represented": "Darcy pressure Laplace equation with velocity from negative pressure gradient",
+        "boundary_condition_type": "Darcy pressure Dirichlet inlet/outlet with no-normal-flow walls",
+        "coordinate_convention": EXPECTED_COORDINATE_CONVENTION,
+        "reference_kind": "demo-only",
+    }
 
     for result in results:
         with np.load(tmp_path / result.artifacts["fields_npz"]) as fields:
@@ -133,10 +132,7 @@ def test_vector_experiments_save_the_same_darcy_derived_reference_fields(tmp_pat
         darcy_reference_iterations=20,
     )
 
-    results = [
-        run_oseen_experiment(config),
-        run_poiseuille_navier_stokes_experiment(config),
-    ]
+    results = [run_poiseuille_navier_stokes_experiment(config)]
     expected = _shared_patch_vector_reference(
         grid_points=config.grid_points,
         iterations=config.darcy_reference_iterations,
@@ -169,7 +165,7 @@ def test_procurement_manifest_records_reference_metadata(tmp_path):
         assert entry["reference_metadata"]["coordinate_convention"] == EXPECTED_COORDINATE_CONVENTION
         if entry["model"] == "darcy":
             assert entry["reference_metadata"]["reference_kind"] == "finite-difference"
-        elif entry["model"] == "stokes":
+        elif entry["model"] in {"stokes", "oseen"}:
             assert entry["reference_metadata"]["reference_kind"] == "manufactured"
         else:
             assert entry["reference_metadata"]["reference_kind"] == "demo-only"

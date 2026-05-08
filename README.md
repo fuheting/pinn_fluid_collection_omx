@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-The current phase adds a Stokes-specific manufactured actual field before Oseen and Navier-Stokes references are replaced. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, summary metrics, and explicit reference metadata, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, and a documented inventory of the locally procured paper-demo bundle.
+The current phase adds an Oseen-specific manufactured actual field before the Navier-Stokes reference is replaced. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, summary metrics, and explicit reference metadata, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, and a documented inventory of the locally procured paper-demo bundle.
 
 ## Planned Phases
 
@@ -35,7 +35,7 @@ The current phase adds a Stokes-specific manufactured actual field before Oseen 
 | 15 | Reference-generation audit and metadata contracts | Complete |
 | 16 | Darcy ground truth hardening | Complete |
 | 17 | Stokes model-specific manufactured ground truth | Complete |
-| 18 | Oseen model-specific ground truth | Planned |
+| 18 | Oseen model-specific ground truth | Complete |
 | 19 | Navier-Stokes model-specific ground truth | Planned |
 | 20 | True performance comparison run with model-specific actual fields | Planned |
 | 21 | Dedicated external CFD/scientific-computing reference solve with OpenFOAM, FEniCS, FiPy, or similar | Planned |
@@ -266,7 +266,7 @@ Phases 8-10 add `pinn_fluid.experiments` for lightweight local comparisons as ph
 | --- | --- | --- | --- |
 | Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
 | Stokes | `stokes_streamfunction_reference` | Stokes incompressible momentum and continuity | manufactured |
-| Oseen | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+| Oseen | `oseen_streamfunction_reference` | Oseen incompressible momentum and continuity | manufactured |
 | Navier-Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
 
 All four references use the Cartesian unit-square convention: `x` increases left-to-right, `y=0` is bottom, `y=1` is top, the inlet is the top-left horizontal patch, and the outlet is the bottom-right horizontal patch. Grid coordinates flatten in x-major order with y varying fastest, while plotting reshapes fields with `reshape(grid_points, grid_points).T` and `origin="lower"`.
@@ -547,12 +547,48 @@ Reference generators after this phase:
 | Oseen | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
 | Navier-Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
 
-Limitations: the Stokes reference is manufactured for deterministic model-specific comparison and residual diagnostics, not an external CFD validation dataset. Oseen and Navier-Stokes remain on the Darcy-derived demo-only vector reference until later phases.
+Limitations: the Stokes reference is manufactured for deterministic model-specific comparison and residual diagnostics, not an external CFD validation dataset. Phase 18 subsequently replaces the Oseen reference; Navier-Stokes remains on the Darcy-derived demo-only vector reference until Phase 19.
 
 Verification and reproduction commands:
 
 ```bash
 python -m pytest tests/test_phase17_stokes_reference.py
+python -m pytest
+git diff --check
+PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
+PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
+```
+
+## Phase 18 Oseen Model-Specific Ground Truth
+
+Phase 18 wires `run_oseen_experiment(...)` to a deterministic manufactured Oseen streamfunction reference on the shared unit-square geometry. The velocity field uses the same top-left downward inlet, bottom-right downward outlet, and no-slip horizontal solid-wall behavior as the Stokes reference, then evaluates the Oseen residual with a documented prescribed convection velocity `(peak_velocity, 0.0)`.
+
+Oseen `fields.npz` now includes:
+
+- `reference_u`, `reference_v`, `reference_pressure`
+- `reference_speed`
+- `reference_continuity`, `reference_x_momentum`, `reference_y_momentum`
+- `reference_residual`
+- `reference_convection_velocity`
+- `reference_metadata_json`
+
+Oseen `metrics.json` now includes finite PINN comparison metrics plus `reference_continuity_rms` and `reference_momentum_rms`.
+
+Reference generators after this phase:
+
+| Model | Reference generator | PDE represented | Reference kind |
+| --- | --- | --- | --- |
+| Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
+| Stokes | `stokes_streamfunction_reference` | Stokes incompressible momentum and continuity | manufactured |
+| Oseen | `oseen_streamfunction_reference` | Oseen incompressible momentum and continuity | manufactured |
+| Navier-Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+
+Limitations: the Oseen reference is manufactured for deterministic model-specific comparison and residual diagnostics, not an external CFD validation dataset. Navier-Stokes remains on the Darcy-derived demo-only vector reference until Phase 19.
+
+Verification and reproduction commands:
+
+```bash
+python -m pytest tests/test_phase18_oseen_reference.py
 python -m pytest
 git diff --check
 PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
@@ -596,6 +632,6 @@ python -m pytest
 
 ## Continuing The Model Phases
 
-The remaining research work is to finish the Oseen and Navier-Stokes model-specific references, run broader comparison studies with selected grid sizes and training budgets, then add a dedicated external CFD/scientific-computing reference-solver phase for validation-quality benchmarks. Keep those studies separate from the lightweight regression-oriented defaults in `pinn_fluid.experiments`.
+The remaining research work is to finish the Navier-Stokes model-specific reference, run broader comparison studies with selected grid sizes and training budgets, then add a dedicated external CFD/scientific-computing reference-solver phase for validation-quality benchmarks. Keep those studies separate from the lightweight regression-oriented defaults in `pinn_fluid.experiments`.
 
 New agents should start with this `README.md` and `progress.md`. Continue the established style: tests first, narrow implementation, docs/progress update, fresh verification, Lore commit, then push `origin main` with the temp gitdir/worktree command when needed. Split the result-procurement work into staged phases rather than trying to produce the full study in one pass.
