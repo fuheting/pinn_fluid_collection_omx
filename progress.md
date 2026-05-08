@@ -40,6 +40,7 @@ Explicitly not completed:
 | 12 | Figure-generation utilities for saved experiment artifacts | Complete |
 | 13 | Local sanity and paper-demo result runs | Complete |
 | 14 | Result-procurement documentation, figure inventory, and limitations | Complete |
+| 15 | Reference-generation audit and metadata contracts | Complete |
 
 ## Phase 2: Darcy Flow
 
@@ -418,6 +419,55 @@ Diagnosis:
 - The `matplotlib` plotting path uses `origin="lower"` with the same `x, y` coordinate convention.
 - Fallback rendering has been removed; missing `matplotlib` now surfaces as Python's normal import error.
 - Remaining physically suspicious extrema or structured residuals after regenerating figures should be treated as reference/training/model-form limitations until the boundary-mask and quiver diagnostics show another coordinate mismatch.
+
+## Phase 15: Reference-Generation Audit And Contracts
+
+Status: complete.
+
+Completed in this pass:
+
+- Added contract tests for the current Darcy finite-difference reference, including shape, finite values, top-left inlet pressure, and bottom-right outlet pressure.
+- Added contract tests proving Stokes, Oseen, and Navier-Stokes currently save the same Darcy-derived shared-patch vector reference.
+- Added coordinate-orientation tests for x-major grid flattening, y-up mathematical coordinates, and figure reshaping with `reshape(grid_points, grid_points).T`.
+- Added reference metadata to `ExperimentResult`, `fields.npz` through `reference_metadata_json`, result-procurement manifest entries, and cross-model JSON reports.
+- Documented the active reference generator for each model in `README.md`.
+
+Current reference generators:
+
+| Model | Reference generator | PDE represented | Reference kind |
+| --- | --- | --- | --- |
+| Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
+| Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+| Oseen | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+| Navier-Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+
+Artifacts produced by current experiments:
+
+- `fields.npz` with predicted fields, reference fields, residual fields, coordinates, and `reference_metadata_json`.
+- `history.json` with total and component-wise training histories.
+- `metrics.json` with finite comparison metrics.
+- `run_manifest.json` with per-model reference metadata when using result procurement.
+- Figure bundles generated from `fields.npz` and `history.json` remain compatible with the metadata addition.
+
+Limitations:
+
+- Phase 15 does not introduce model-specific Stokes, Oseen, or Navier-Stokes actual fields.
+- The vector-flow references remain demo-only Darcy-derived shared-patch fields until later phases replace them.
+- The metadata records the current behavior so future phases can distinguish a true model-specific reference from the current procurement target.
+
+Verification:
+
+- `python -m pytest tests/test_phase15_reference_contracts.py` first failed on missing `reference_metadata` in `ExperimentResult` and missing manifest metadata.
+- After the narrow implementation, `python -m pytest tests/test_phase15_reference_contracts.py` passed.
+- Final verification for the phase is `python -m pytest tests/test_phase15_reference_contracts.py`, `python -m pytest`, and `git diff --check`.
+
+Reproduction commands:
+
+```bash
+python -m pytest tests/test_phase15_reference_contracts.py
+PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
+PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
+```
 
 ## Continuing Guidance
 

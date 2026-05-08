@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-The current phase documents the completed local sanity and paper-demo result-procurement runs plus follow-up diagnostics for visually suspicious flow fields. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, and summary metrics, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, and a documented inventory of the locally procured paper-demo bundle.
+The current phase test-locks the existing reference-generation behavior before model-specific actual fields are introduced. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, summary metrics, and explicit reference metadata, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, and a documented inventory of the locally procured paper-demo bundle.
 
 ## Planned Phases
 
@@ -32,6 +32,7 @@ The current phase documents the completed local sanity and paper-demo result-pro
 | 12 | Figure-generation utilities for saved experiment artifacts | Complete |
 | 13 | Local sanity and paper-demo result runs | Complete |
 | 14 | Result-procurement documentation, figure inventory, and limitations | Complete |
+| 15 | Reference-generation audit and metadata contracts | Complete |
 
 ## Repository Layout
 
@@ -248,15 +249,27 @@ Phases 8-10 add `pinn_fluid.experiments` for lightweight local comparisons as ph
 
 - `TrainingHistory` records total objective values and per-loss-component histories for every optimizer iteration.
 - `ExperimentResult` stores model name, reference source, grid shape, metrics, and artifact paths.
+- `ExperimentResult` stores reference metadata with the generator name, PDE model represented by the reference, boundary condition type, coordinate convention, and reference kind.
 - `run_darcy_experiment(...)` trains a small Darcy pressure field and compares it to an in-repo finite-difference Laplace reference on a deterministic grid.
 - `run_poiseuille_navier_stokes_experiment(...)` keeps the historical API name but now trains a small velocity-pressure field on the same shared unit-square patch geometry as Darcy: top-left inlet, bottom-right outlet, and walls.
 - `run_stokes_experiment(...)` and `run_oseen_experiment(...)` use the same shared-patch boundary setup so the vector-flow comparisons are no longer horizontal channel-flow artifacts.
 - The vector experiments save reference `u`, `v`, and pressure fields from the shared-patch finite-difference pressure/velocity reference used to make the Darcy geometry visible in all model panels.
+- Current reference metadata is:
+
+| Model | Reference generator | PDE represented | Reference kind |
+| --- | --- | --- | --- |
+| Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
+| Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+| Oseen | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+| Navier-Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+
+All four references use the Cartesian unit-square convention: `x` increases left-to-right, `y=0` is bottom, `y=1` is top, the inlet is the top-left horizontal patch, and the outlet is the bottom-right horizontal patch. Grid coordinates flatten in x-major order with y varying fastest, while plotting reshapes fields with `reshape(grid_points, grid_points).T` and `origin="lower"`.
 - `run_all_experiments(...)` runs Darcy, Stokes, Oseen, and Navier-Stokes in order and writes a consolidated JSON and Markdown report.
 
 Each experiment writes reproducible numeric artifacts under the configured output directory:
 
 - `fields.npz` with grid coordinates, PINN-predicted fields, reference fields, and residual fields
+- `fields.npz` also includes `reference_metadata_json` so each field bundle records its reference source and coordinate convention
 - `history.json` with total and component-wise objective histories
 - `metrics.json` with finite L2/RMS comparison metrics
 - loss-history and field plot artifacts
@@ -265,7 +278,7 @@ The first-pass success criterion is intentionally modest: histories should decre
 
 ## Result Procurement Handoff
 
-Phase 11 adds `pinn_fluid.result_procurement.run_result_procurement(...)` and a `python -m pinn_fluid.result_procurement` entry point. The runner wraps the existing all-model experiment API, writes results under the configured output directory, and saves `run_manifest.json` with the git commit, config values, per-model output directories, artifact paths, metric summaries, finite-metric flags, and history-reduction flags.
+Phase 11 adds `pinn_fluid.result_procurement.run_result_procurement(...)` and a `python -m pinn_fluid.result_procurement` entry point. The runner wraps the existing all-model experiment API, writes results under the configured output directory, and saves `run_manifest.json` with the git commit, config values, per-model output directories, reference metadata, artifact paths, metric summaries, finite-metric flags, and history-reduction flags.
 
 Example sanity procurement command:
 
@@ -442,6 +455,34 @@ Known limitations:
 - Generated `.npz`, `.json`, and `.png` artifacts are intentionally ignored under `data/` and are not part of the committed source tree.
 
 Keep generated outputs under ignored local paths such as `data/experiments_sanity/` and `data/experiments_paper_demo/`. Commit source, tests, and documentation only; do not commit generated `.npz`, `.json`, or `.png` experiment artifacts unless a future phase explicitly changes that policy.
+
+## Phase 15 Reference-Generation Contracts
+
+Phase 15 makes the current reference behavior explicit without changing the physics. The new contract tests document `_fd_darcy_reference(...)`, the shared Darcy-derived vector reference, coordinate flattening and plotting orientation, and the reference metadata saved by experiments and procurement manifests.
+
+Reference metadata is now saved in:
+
+- `ExperimentResult.reference_metadata`
+- `fields.npz` as `reference_metadata_json`
+- `run_manifest.json` entries as `reference_metadata`
+- `summary/cross_model_report.json` through `ExperimentResult.to_json_dict()`
+
+The current limitation remains intentional: Darcy uses a finite-difference Laplace reference, while Stokes, Oseen, and Navier-Stokes still use a demo-only vector field derived from that Darcy reference. Phase 15 does not make Stokes, Oseen, or Navier-Stokes ground truth physically model-specific; it locks the existing behavior so Phases 17-19 can replace those references deliberately.
+
+Verification commands for this phase:
+
+```bash
+python -m pytest tests/test_phase15_reference_contracts.py
+python -m pytest
+git diff --check
+```
+
+Artifact and figure regeneration still use the existing commands:
+
+```bash
+PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
+PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
+```
 
 ## Environment Direction
 

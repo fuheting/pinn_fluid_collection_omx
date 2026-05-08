@@ -50,3 +50,4 @@ def test_experiment_result_schema_serializes_metrics_history_and_artifacts():
     assert payload["history"]["total"] == [2.0, 1.0]
     assert payload["metrics"] == {"pressure_l2": 0.25}
     assert payload["artifacts"] == {"fields_npz": "artifacts/darcy/fields.npz"}
+    assert payload["reference_metadata"] == {}

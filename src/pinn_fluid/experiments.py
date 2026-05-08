@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, field
 import json
 from pathlib import Path
 from typing import Callable
@@ -25,6 +26,34 @@ from pinn_fluid.models.navier_stokes import navier_stokes_residuals
 from pinn_fluid.models.oseen import oseen_residuals
 from pinn_fluid.models.stokes import StokesVelocityPressureField, stokes_residuals
 from pinn_fluid.solvers.darcy import darcy_loss_components
+
+COORDINATE_CONVENTION_METADATA: dict[str, object] = {
+    "name": "cartesian_unit_square_y_up",
+    "domain": "unit_square",
+    "x_axis": "x increases left-to-right",
+    "y_axis": "y=0 bottom, y=1 top",
+    "inlet": "top-left horizontal segment: x in [0.0, 0.25], y=1",
+    "outlet": "bottom-right horizontal segment: x in [0.75, 1.0], y=0",
+    "flattening_order": "x-major with y varying fastest from bottom to top",
+    "reshape_order": "reshape(grid_points, grid_points).T for plotting",
+    "plot_origin": "lower",
+}
+
+DARCY_REFERENCE_METADATA: dict[str, object] = {
+    "reference_generator_name": "fd_darcy_reference",
+    "pde_model_represented": "Darcy pressure Laplace equation",
+    "boundary_condition_type": "pressure Dirichlet inlet/outlet with no-normal-flow walls",
+    "coordinate_convention": COORDINATE_CONVENTION_METADATA,
+    "reference_kind": "finite-difference",
+}
+
+SHARED_PATCH_VECTOR_REFERENCE_METADATA: dict[str, object] = {
+    "reference_generator_name": "shared_patch_vector_reference_from_fd_darcy",
+    "pde_model_represented": "Darcy pressure Laplace equation with velocity from negative pressure gradient",
+    "boundary_condition_type": "Darcy pressure Dirichlet inlet/outlet with no-normal-flow walls",
+    "coordinate_convention": COORDINATE_CONVENTION_METADATA,
+    "reference_kind": "demo-only",
+}
 
 
 @dataclass(frozen=True)
@@ -82,6 +111,7 @@ class ExperimentResult:
     history: TrainingHistory
     metrics: dict[str, float]
     artifacts: dict[str, str]
+    reference_metadata: dict[str, object] = field(default_factory=dict)
 
     def to_json_dict(self) -> dict[str, object]:
         """Return a JSON-serializable experiment result payload."""
@@ -93,6 +123,7 @@ class ExperimentResult:
             "history": self.history.to_json_dict(),
             "metrics": dict(self.metrics),
             "artifacts": dict(self.artifacts),
+            "reference_metadata": deepcopy(self.reference_metadata),
         }
 
 
@@ -240,6 +271,10 @@ def _fd_darcy_reference(grid_points: int, iterations: int) -> tuple[np.ndarray, 
     return pressure.reshape(-1, 1), velocity
 
 
+def _reference_metadata_json(metadata: dict[str, object]) -> str:
+    return json.dumps(metadata, sort_keys=True)
+
+
 def _shared_patch_vector_reference(
     grid_points: int,
     iterations: int,
@@ -283,6 +318,7 @@ def run_darcy_experiment(config: ExperimentConfig | None = None) -> ExperimentRe
         active.grid_points,
         active.darcy_reference_iterations,
     )
+    reference_metadata = deepcopy(DARCY_REFERENCE_METADATA)
 
     predicted_pressure_np = predicted_pressure.detach().numpy()
     predicted_velocity_np = predicted_velocity.detach().numpy()
@@ -306,6 +342,7 @@ def run_darcy_experiment(config: ExperimentConfig | None = None) -> ExperimentRe
         predicted_velocity=predicted_velocity_np,
         reference_velocity=reference_velocity,
         residual=residual_np,
+        reference_metadata_json=_reference_metadata_json(reference_metadata),
     )
     _save_history(history, history_path)
     _save_metrics(metrics, metrics_path)
@@ -325,6 +362,7 @@ def run_darcy_experiment(config: ExperimentConfig | None = None) -> ExperimentRe
             "loss_plot_png": _relative(loss_plot_path, output_dir),
             "field_plot_png": _relative(field_plot_path, output_dir),
         },
+        reference_metadata=reference_metadata,
     )
 
 
@@ -416,6 +454,7 @@ def _run_shared_patch_vector_experiment(
         config.grid_points,
         config.darcy_reference_iterations,
     )
+    reference_metadata = deepcopy(SHARED_PATCH_VECTOR_REFERENCE_METADATA)
     residuals = residual_builder(predicted, autograd_coordinates)
     residual_np = np.sqrt(
         sum(value.detach().numpy() ** 2 for value in residuals.values())
@@ -445,6 +484,7 @@ def _run_shared_patch_vector_experiment(
         reference_v=reference_fields["v"],
         reference_pressure=reference_pressure,
         residual=residual_np,
+        reference_metadata_json=_reference_metadata_json(reference_metadata),
     )
     _save_history(history, history_path)
     _save_metrics(metrics, metrics_path)
@@ -464,6 +504,7 @@ def _run_shared_patch_vector_experiment(
             "loss_plot_png": _relative(loss_plot_path, output_dir),
             "field_plot_png": _relative(field_plot_path, output_dir),
         },
+        reference_metadata=reference_metadata,
     )
 
 
@@ -579,6 +620,9 @@ __all__ = [
     "ExperimentConfig",
     "ExperimentResult",
     "TrainingHistory",
+    "COORDINATE_CONVENTION_METADATA",
+    "DARCY_REFERENCE_METADATA",
+    "SHARED_PATCH_VECTOR_REFERENCE_METADATA",
     "run_all_experiments",
     "run_darcy_experiment",
     "run_oseen_experiment",

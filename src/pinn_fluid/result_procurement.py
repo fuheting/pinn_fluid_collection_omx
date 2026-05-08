@@ -52,6 +52,7 @@ def _result_payload(result: ExperimentResult, output_dir: Path) -> dict[str, Any
     return {
         "model": result.model,
         "reference": result.reference,
+        "reference_metadata": dict(result.reference_metadata),
         "output_dir": str(model_output_dir),
         "grid_shape": list(result.grid_shape),
         "history_decreased": result.history.reduced,
