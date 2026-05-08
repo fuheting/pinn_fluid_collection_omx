@@ -106,7 +106,7 @@ def test_experiment_results_and_artifacts_record_reference_metadata(tmp_path):
         "coordinate_convention": EXPECTED_COORDINATE_CONVENTION,
         "reference_kind": "finite-difference",
     }
-    for model in ("stokes", "oseen", "navier_stokes"):
+    for model in ("oseen", "navier_stokes"):
         assert metadata_by_model[model] == {
             "reference_generator_name": "shared_patch_vector_reference_from_fd_darcy",
             "pde_model_represented": "Darcy pressure Laplace equation with velocity from negative pressure gradient",
@@ -134,7 +134,6 @@ def test_vector_experiments_save_the_same_darcy_derived_reference_fields(tmp_pat
     )
 
     results = [
-        run_stokes_experiment(config),
         run_oseen_experiment(config),
         run_poiseuille_navier_stokes_experiment(config),
     ]
@@ -170,5 +169,7 @@ def test_procurement_manifest_records_reference_metadata(tmp_path):
         assert entry["reference_metadata"]["coordinate_convention"] == EXPECTED_COORDINATE_CONVENTION
         if entry["model"] == "darcy":
             assert entry["reference_metadata"]["reference_kind"] == "finite-difference"
+        elif entry["model"] == "stokes":
+            assert entry["reference_metadata"]["reference_kind"] == "manufactured"
         else:
             assert entry["reference_metadata"]["reference_kind"] == "demo-only"

@@ -55,6 +55,14 @@ SHARED_PATCH_VECTOR_REFERENCE_METADATA: dict[str, object] = {
     "reference_kind": "demo-only",
 }
 
+STOKES_REFERENCE_METADATA: dict[str, object] = {
+    "reference_generator_name": "stokes_streamfunction_reference",
+    "pde_model_represented": "Stokes incompressible momentum and continuity",
+    "boundary_condition_type": "manufactured velocity inlet/outlet with no-slip horizontal solid walls",
+    "coordinate_convention": COORDINATE_CONVENTION_METADATA,
+    "reference_kind": "manufactured",
+}
+
 
 @dataclass(frozen=True)
 class TrainingHistory:
@@ -317,6 +325,55 @@ def _shared_patch_vector_reference(
     }
 
 
+def _smoothstep(value: torch.Tensor, start: float, end: float) -> torch.Tensor:
+    t = ((value - start) / (end - start)).clamp(0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def _stokes_reference_fields(
+    grid_points: int,
+    *,
+    viscosity: float,
+    peak_velocity: float,
+) -> dict[str, np.ndarray]:
+    """Return a deterministic manufactured Stokes streamfunction reference."""
+
+    coordinates = _grid_coordinates(grid_points).to(dtype=torch.float64).requires_grad_(True)
+    x = coordinates[:, :1]
+    y = coordinates[:, 1:2]
+    inlet_window = _smoothstep(x, 0.0, 0.25)
+    outlet_window = _smoothstep(x, 0.75, 1.0)
+    top_layer = _smoothstep(y, 0.55, 1.0)
+    bottom_layer = 1.0 - _smoothstep(y, 0.0, 0.45)
+    scale = peak_velocity / 6.0
+    streamfunction = scale * (inlet_window * top_layer + outlet_window * bottom_layer)
+    stream_gradient = torch.autograd.grad(
+        streamfunction,
+        coordinates,
+        grad_outputs=torch.ones_like(streamfunction),
+        create_graph=True,
+        retain_graph=True,
+    )[0]
+    u = stream_gradient[:, 1:2]
+    v = -stream_gradient[:, :1]
+    pressure = coordinates[:, :1] * 0.0
+    residuals = stokes_residuals(u, v, pressure, coordinates, viscosity=viscosity)
+    residual_magnitude = torch.sqrt(sum(value.square() for value in residuals.values()))
+    velocity = torch.cat((u, v), dim=1)
+
+    return {
+        "u": u.detach().numpy(),
+        "v": v.detach().numpy(),
+        "pressure": pressure.detach().numpy(),
+        "velocity": velocity.detach().numpy(),
+        "speed": torch.linalg.norm(velocity, dim=1, keepdim=True).detach().numpy(),
+        "continuity": residuals["continuity"].detach().numpy(),
+        "x_momentum": residuals["x_momentum"].detach().numpy(),
+        "y_momentum": residuals["y_momentum"].detach().numpy(),
+        "residual": residual_magnitude.detach().numpy(),
+    }
+
+
 def run_darcy_experiment(config: ExperimentConfig | None = None) -> ExperimentResult:
     """Run the deterministic Darcy PINN/reference vertical-slice experiment."""
 
@@ -451,6 +508,8 @@ def _run_shared_patch_vector_experiment(
     reference: str,
     config: ExperimentConfig,
     residual_builder: Callable[[dict[str, torch.Tensor], torch.Tensor], dict[str, torch.Tensor]],
+    reference_builder: Callable[[], dict[str, np.ndarray]],
+    reference_metadata: dict[str, object],
 ) -> ExperimentResult:
     output_dir = _as_output_dir(config.output_dir)
     model_dir = output_dir / model_name
@@ -488,11 +547,8 @@ def _run_shared_patch_vector_experiment(
     coordinates = _grid_coordinates(config.grid_points)
     autograd_coordinates = coordinates.detach().clone().requires_grad_(True)
     predicted = model(autograd_coordinates)
-    reference_fields = _shared_patch_vector_reference(
-        config.grid_points,
-        config.darcy_reference_iterations,
-    )
-    reference_metadata = deepcopy(SHARED_PATCH_VECTOR_REFERENCE_METADATA)
+    reference_fields = reference_builder()
+    active_reference_metadata = deepcopy(reference_metadata)
     residuals = residual_builder(predicted, autograd_coordinates)
     residual_np = np.sqrt(
         sum(value.detach().numpy() ** 2 for value in residuals.values())
@@ -506,24 +562,46 @@ def _run_shared_patch_vector_experiment(
         "velocity_l2": _velocity_l2(predicted_velocity, reference_velocity),
         "residual_rms": float(np.sqrt(np.mean(residual_np**2))),
     }
+    if "continuity" in reference_fields:
+        metrics["reference_continuity_rms"] = float(
+            np.sqrt(np.mean(reference_fields["continuity"] ** 2))
+        )
+    if "x_momentum" in reference_fields and "y_momentum" in reference_fields:
+        metrics["reference_momentum_rms"] = float(
+            np.sqrt(
+                np.mean(
+                    reference_fields["x_momentum"] ** 2
+                    + reference_fields["y_momentum"] ** 2
+                )
+            )
+        )
 
     fields_path = model_dir / "fields.npz"
     history_path = model_dir / "history.json"
     metrics_path = model_dir / "metrics.json"
     loss_plot_path = model_dir / "loss_history.png"
     field_plot_path = model_dir / "predicted_u.png"
-    np.savez(
-        fields_path,
-        coordinates=coordinates.numpy(),
-        predicted_u=predicted["u"].detach().numpy(),
-        predicted_v=predicted["v"].detach().numpy(),
-        predicted_pressure=predicted_pressure,
-        reference_u=reference_fields["u"],
-        reference_v=reference_fields["v"],
-        reference_pressure=reference_pressure,
-        residual=residual_np,
-        reference_metadata_json=_reference_metadata_json(reference_metadata),
-    )
+    field_payload = {
+        "coordinates": coordinates.numpy(),
+        "predicted_u": predicted["u"].detach().numpy(),
+        "predicted_v": predicted["v"].detach().numpy(),
+        "predicted_pressure": predicted_pressure,
+        "reference_u": reference_fields["u"],
+        "reference_v": reference_fields["v"],
+        "reference_pressure": reference_pressure,
+        "residual": residual_np,
+        "reference_metadata_json": _reference_metadata_json(active_reference_metadata),
+    }
+    for source_key, target_key in (
+        ("speed", "reference_speed"),
+        ("continuity", "reference_continuity"),
+        ("x_momentum", "reference_x_momentum"),
+        ("y_momentum", "reference_y_momentum"),
+        ("residual", "reference_residual"),
+    ):
+        if source_key in reference_fields:
+            field_payload[target_key] = reference_fields[source_key]
+    np.savez(fields_path, **field_payload)
     _save_history(history, history_path)
     _save_metrics(metrics, metrics_path)
     _plot_history(history, loss_plot_path)
@@ -542,7 +620,7 @@ def _run_shared_patch_vector_experiment(
             "loss_plot_png": _relative(loss_plot_path, output_dir),
             "field_plot_png": _relative(field_plot_path, output_dir),
         },
-        reference_metadata=reference_metadata,
+        reference_metadata=active_reference_metadata,
     )
 
 
@@ -563,6 +641,11 @@ def run_poiseuille_navier_stokes_experiment(
             coordinates,
             viscosity=active.viscosity,
         ),
+        reference_builder=lambda: _shared_patch_vector_reference(
+            active.grid_points,
+            active.darcy_reference_iterations,
+        ),
+        reference_metadata=SHARED_PATCH_VECTOR_REFERENCE_METADATA,
     )
 
 
@@ -572,7 +655,7 @@ def run_stokes_experiment(config: ExperimentConfig | None = None) -> ExperimentR
     active = ExperimentConfig() if config is None else config
     return _run_shared_patch_vector_experiment(
         model_name="stokes",
-        reference="shared_patch_unit_square_reference",
+        reference="manufactured_stokes_streamfunction",
         config=active,
         residual_builder=lambda outputs, coordinates: stokes_residuals(
             outputs["u"],
@@ -581,6 +664,12 @@ def run_stokes_experiment(config: ExperimentConfig | None = None) -> ExperimentR
             coordinates,
             viscosity=active.viscosity,
         ),
+        reference_builder=lambda: _stokes_reference_fields(
+            active.grid_points,
+            viscosity=active.viscosity,
+            peak_velocity=active.peak_velocity,
+        ),
+        reference_metadata=STOKES_REFERENCE_METADATA,
     )
 
 
@@ -612,6 +701,11 @@ def run_oseen_experiment(config: ExperimentConfig | None = None) -> ExperimentRe
         reference="shared_patch_unit_square_reference",
         config=active,
         residual_builder=residual_builder,
+        reference_builder=lambda: _shared_patch_vector_reference(
+            active.grid_points,
+            active.darcy_reference_iterations,
+        ),
+        reference_metadata=SHARED_PATCH_VECTOR_REFERENCE_METADATA,
     )
 
 
@@ -661,7 +755,9 @@ __all__ = [
     "COORDINATE_CONVENTION_METADATA",
     "DARCY_REFERENCE_METADATA",
     "SHARED_PATCH_VECTOR_REFERENCE_METADATA",
+    "STOKES_REFERENCE_METADATA",
     "_fd_darcy_reference_fields",
+    "_stokes_reference_fields",
     "run_all_experiments",
     "run_darcy_experiment",
     "run_oseen_experiment",

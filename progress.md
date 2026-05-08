@@ -42,6 +42,7 @@ Explicitly not completed:
 | 14 | Result-procurement documentation, figure inventory, and limitations | Complete |
 | 15 | Reference-generation audit and metadata contracts | Complete |
 | 16 | Darcy ground truth hardening | Complete |
+| 17 | Stokes model-specific manufactured ground truth | Complete |
 
 ## Phase 2: Darcy Flow
 
@@ -438,7 +439,7 @@ Current reference generators:
 | Model | Reference generator | PDE represented | Reference kind |
 | --- | --- | --- | --- |
 | Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
-| Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+| Stokes | `stokes_streamfunction_reference` | Stokes incompressible momentum and continuity | manufactured |
 | Oseen | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
 | Navier-Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
 
@@ -518,6 +519,57 @@ Reproduction commands:
 
 ```bash
 python -m pytest tests/test_phase16_darcy_ground_truth.py
+PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
+PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
+```
+
+## Phase 17: Stokes Model-Specific Ground Truth
+
+Status: complete.
+
+Completed in this pass:
+
+- Added `_stokes_reference_fields(...)`, a deterministic manufactured Stokes streamfunction reference on the shared unit-square geometry.
+- Built the reference from a streamfunction so continuity is zero up to numerical/autograd precision.
+- Added Stokes reference diagnostics for continuity, x-momentum, y-momentum, residual magnitude, velocity components, speed, and pressure.
+- Wired `run_stokes_experiment(...)` to use `manufactured_stokes_streamfunction` instead of the Darcy-derived shared-patch vector reference.
+- Updated Stokes reference metadata to `stokes_streamfunction_reference`, PDE model `Stokes incompressible momentum and continuity`, and kind `manufactured`.
+- Preserved Oseen and Navier-Stokes on the existing Darcy-derived demo-only vector reference.
+- Added tests for Stokes incompressibility behavior, momentum residual diagnostics, inlet/outlet/horizontal-wall boundary behavior, finite metrics, artifact schema compatibility, and figure-generation compatibility.
+- Updated `README.md` with the Phase 17 artifact schema, active reference generators, limitations, and reproduction commands.
+
+Current reference generators:
+
+| Model | Reference generator | PDE represented | Reference kind |
+| --- | --- | --- | --- |
+| Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
+| Stokes | `stokes_streamfunction_reference` | Stokes incompressible momentum and continuity | manufactured |
+| Oseen | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+| Navier-Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+
+Artifacts produced by current Stokes experiments:
+
+- `fields.npz` with coordinates, predicted/reference `u`, `v`, pressure, reference speed, reference continuity, reference x/y momentum residuals, reference residual magnitude, PINN residual magnitude, and `reference_metadata_json`.
+- `history.json` with total and component-wise training histories.
+- `metrics.json` with `pressure_l2`, `velocity_l2`, `residual_rms`, `reference_continuity_rms`, and `reference_momentum_rms`.
+- Figure bundles continue to generate Stokes field panels, scalar fields, convergence panels, and pressure-velocity quiver diagnostics from the saved artifact schema.
+
+Limitations:
+
+- The Stokes reference is manufactured and deterministic; it is not external CFD validation data.
+- The manufactured field is intended as a model-specific comparison target and diagnostic reference, not a final physical benchmark for publication-grade accuracy claims.
+- Oseen and Navier-Stokes remain on the Phase 15 demo-only Darcy-derived vector reference until later phases replace them.
+
+Verification:
+
+- `python -m pytest tests/test_phase17_stokes_reference.py tests/test_phase15_reference_contracts.py tests/test_phase10_consolidated_experiments.py` first failed because `_stokes_reference_fields` did not exist and Stokes still reported `shared_patch_unit_square_reference`.
+- After implementation and contract updates, targeted tests passed.
+- Final verification for the phase is `python -m pytest tests/test_phase17_stokes_reference.py`, `python -m pytest`, and `git diff --check`.
+
+Reproduction commands:
+
+```bash
+python -m pytest tests/test_phase17_stokes_reference.py
 PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
 PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
 ```

@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-The current phase hardens the Darcy finite-difference actual field before model-specific vector-flow references are introduced. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, summary metrics, and explicit reference metadata, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, and a documented inventory of the locally procured paper-demo bundle.
+The current phase adds a Stokes-specific manufactured actual field before Oseen and Navier-Stokes references are replaced. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, summary metrics, and explicit reference metadata, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, and a documented inventory of the locally procured paper-demo bundle.
 
 ## Planned Phases
 
@@ -34,6 +34,7 @@ The current phase hardens the Darcy finite-difference actual field before model-
 | 14 | Result-procurement documentation, figure inventory, and limitations | Complete |
 | 15 | Reference-generation audit and metadata contracts | Complete |
 | 16 | Darcy ground truth hardening | Complete |
+| 17 | Stokes model-specific manufactured ground truth | Complete |
 
 ## Repository Layout
 
@@ -260,7 +261,7 @@ Phases 8-10 add `pinn_fluid.experiments` for lightweight local comparisons as ph
 | Model | Reference generator | PDE represented | Reference kind |
 | --- | --- | --- | --- |
 | Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
-| Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+| Stokes | `stokes_streamfunction_reference` | Stokes incompressible momentum and continuity | manufactured |
 | Oseen | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
 | Navier-Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
 
@@ -503,16 +504,51 @@ Reference generators after this phase remain:
 | Model | Reference generator | PDE represented | Reference kind |
 | --- | --- | --- | --- |
 | Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
-| Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+| Stokes | `stokes_streamfunction_reference` | Stokes incompressible momentum and continuity | manufactured |
 | Oseen | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
 | Navier-Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
 
-Limitations remain narrow: Phase 16 does not introduce Stokes, Oseen, or Navier-Stokes model-specific actual fields, and it does not claim external CFD validation for the Darcy finite-difference solve.
+Limitations remain narrow: Phase 16 does not introduce Stokes, Oseen, or Navier-Stokes model-specific actual fields, and it does not claim external CFD validation for the Darcy finite-difference solve. Phase 17 subsequently replaces the Stokes reference only.
 
 Verification and reproduction commands:
 
 ```bash
 python -m pytest tests/test_phase16_darcy_ground_truth.py
+python -m pytest
+git diff --check
+PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
+PYTHONPATH=src python -m pinn_fluid.figures data/experiments_sanity
+```
+
+## Phase 17 Stokes Model-Specific Ground Truth
+
+Phase 17 wires `run_stokes_experiment(...)` to a deterministic manufactured Stokes streamfunction reference on the shared unit-square geometry. The reference is divergence-free by construction, has top-left downward inlet flow and bottom-right downward outlet flow, keeps horizontal solid-wall velocity zero away from the openings, and records Stokes continuity and momentum residual diagnostics.
+
+Stokes `fields.npz` now includes:
+
+- `reference_u`, `reference_v`, `reference_pressure`
+- `reference_speed`
+- `reference_continuity`, `reference_x_momentum`, `reference_y_momentum`
+- `reference_residual`
+- `reference_metadata_json`
+
+Stokes `metrics.json` now includes finite PINN comparison metrics plus `reference_continuity_rms` and `reference_momentum_rms`.
+
+Reference generators after this phase:
+
+| Model | Reference generator | PDE represented | Reference kind |
+| --- | --- | --- | --- |
+| Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
+| Stokes | `stokes_streamfunction_reference` | Stokes incompressible momentum and continuity | manufactured |
+| Oseen | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+| Navier-Stokes | `shared_patch_vector_reference_from_fd_darcy` | Darcy pressure Laplace equation with velocity from negative pressure gradient | demo-only |
+
+Limitations: the Stokes reference is manufactured for deterministic model-specific comparison and residual diagnostics, not an external CFD validation dataset. Oseen and Navier-Stokes remain on the Darcy-derived demo-only vector reference until later phases.
+
+Verification and reproduction commands:
+
+```bash
+python -m pytest tests/test_phase17_stokes_reference.py
 python -m pytest
 git diff --check
 PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/experiments_sanity --git-commit <commit>
