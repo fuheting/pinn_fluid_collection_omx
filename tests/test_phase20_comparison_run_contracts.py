@@ -11,13 +11,17 @@ from pinn_fluid.result_procurement import run_result_procurement
 
 EXPECTED_REFERENCE_GENERATORS = {
     "darcy": "fd_darcy_reference",
-    "stokes": "stokes_streamfunction_reference",
-    "oseen": "oseen_streamfunction_reference",
-    "navier_stokes": "navier_stokes_streamfunction_reference",
+    "stokes": "openfoam_simplefoam_shared_domain",
+    "oseen": "openfoam_simplefoam_shared_domain",
+    "navier_stokes": "openfoam_simplefoam_shared_domain",
 }
 
 
-def test_procurement_manifest_summarizes_model_specific_reference_generators(tmp_path):
+def test_procurement_manifest_summarizes_model_specific_reference_generators(
+    tmp_path,
+    openfoam_sample_writer,
+):
+    sample_path = openfoam_sample_writer(tmp_path / "sharedDomainGrid.xy", grid_points=5)
     config = ExperimentConfig(
         output_dir=tmp_path / "comparison",
         grid_points=5,
@@ -28,6 +32,7 @@ def test_procurement_manifest_summarizes_model_specific_reference_generators(tmp
         seed=12,
         viscosity=0.25,
         darcy_reference_iterations=20,
+        openfoam_reference_sample_path=sample_path,
     )
 
     manifest = run_result_procurement(config, git_commit="phase20-test")
@@ -38,11 +43,15 @@ def test_procurement_manifest_summarizes_model_specific_reference_generators(tmp
     for entry in manifest["results"]:
         metadata = entry["reference_metadata"]
         assert metadata["reference_generator_name"] == EXPECTED_REFERENCE_GENERATORS[entry["model"]]
-        assert metadata["reference_kind"] in {"finite-difference", "manufactured"}
+        assert metadata["reference_kind"] in {"finite-difference", "dedicated-solver"}
         assert "reference_continuity_rms" in entry["metrics"] or entry["model"] == "darcy"
 
 
-def test_procured_model_specific_bundle_has_required_fields_and_figures(tmp_path):
+def test_procured_model_specific_bundle_has_required_fields_and_figures(
+    tmp_path,
+    openfoam_sample_writer,
+):
+    sample_path = openfoam_sample_writer(tmp_path / "sharedDomainGrid.xy", grid_points=5)
     config = ExperimentConfig(
         output_dir=tmp_path / "comparison",
         grid_points=5,
@@ -53,6 +62,7 @@ def test_procured_model_specific_bundle_has_required_fields_and_figures(tmp_path
         seed=13,
         viscosity=0.25,
         darcy_reference_iterations=20,
+        openfoam_reference_sample_path=sample_path,
     )
 
     manifest = run_result_procurement(config, git_commit="phase20-test")

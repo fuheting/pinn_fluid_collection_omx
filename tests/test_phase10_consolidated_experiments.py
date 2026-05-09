@@ -5,8 +5,8 @@ import json
 from pinn_fluid.experiments import ExperimentConfig, run_all_experiments
 
 
-def test_run_all_experiments_adds_stokes_oseen_and_report(tmp_path):
-    config = ExperimentConfig(
+def test_run_all_experiments_adds_stokes_oseen_and_report(tmp_path, openfoam_config_factory):
+    config = openfoam_config_factory(
         output_dir=tmp_path,
         grid_points=5,
         training_steps=4,
@@ -28,9 +28,9 @@ def test_run_all_experiments_adds_stokes_oseen_and_report(tmp_path):
     assert all(result.history.reduced for result in results)
     assert all(result.metrics["velocity_l2"] >= 0.0 for result in results)
     assert all(result.metrics["residual_rms"] >= 0.0 for result in results)
-    assert results[1].reference == "manufactured_stokes_streamfunction"
-    assert results[2].reference == "manufactured_oseen_streamfunction"
-    assert results[3].reference == "manufactured_navier_stokes_streamfunction"
+    assert results[1].reference == "openfoam_simplefoam_shared_domain"
+    assert results[2].reference == "openfoam_simplefoam_shared_domain"
+    assert results[3].reference == "openfoam_simplefoam_shared_domain"
     for result in results[1:]:
         assert {"inlet", "outlet", "wall"}.issubset(result.history.components)
 

@@ -6,7 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import matplotlib
 
@@ -53,30 +53,6 @@ SHARED_PATCH_VECTOR_REFERENCE_METADATA: dict[str, object] = {
     "boundary_condition_type": "Darcy pressure Dirichlet inlet/outlet with no-normal-flow walls",
     "coordinate_convention": COORDINATE_CONVENTION_METADATA,
     "reference_kind": "demo-only",
-}
-
-STOKES_REFERENCE_METADATA: dict[str, object] = {
-    "reference_generator_name": "stokes_streamfunction_reference",
-    "pde_model_represented": "Stokes incompressible momentum and continuity",
-    "boundary_condition_type": "manufactured velocity inlet/outlet with no-slip horizontal solid walls",
-    "coordinate_convention": COORDINATE_CONVENTION_METADATA,
-    "reference_kind": "manufactured",
-}
-
-OSEEN_REFERENCE_METADATA: dict[str, object] = {
-    "reference_generator_name": "oseen_streamfunction_reference",
-    "pde_model_represented": "Oseen incompressible momentum and continuity",
-    "boundary_condition_type": "manufactured velocity inlet/outlet with no-slip horizontal solid walls",
-    "coordinate_convention": COORDINATE_CONVENTION_METADATA,
-    "reference_kind": "manufactured",
-}
-
-NAVIER_STOKES_REFERENCE_METADATA: dict[str, object] = {
-    "reference_generator_name": "navier_stokes_streamfunction_reference",
-    "pde_model_represented": "Navier-Stokes incompressible momentum and continuity",
-    "boundary_condition_type": "manufactured velocity inlet/outlet with no-slip horizontal solid walls",
-    "coordinate_convention": COORDINATE_CONVENTION_METADATA,
-    "reference_kind": "manufactured",
 }
 
 
@@ -165,6 +141,12 @@ class ExperimentConfig:
     viscosity: float = 0.25
     peak_velocity: float = 1.0
     darcy_reference_iterations: int = 400
+    vector_reference_source: str = "openfoam"
+    openfoam_reference_sample_path: Path | str | None = None
+    openfoam_case_dir: Path | str | None = None
+    openfoam_end_time: int = 50
+    vector_reference_fields: dict[str, Any] | None = field(default=None, compare=False, repr=False)
+    vector_reference_metadata: dict[str, object] | None = field(default=None, compare=False, repr=False)
 
 
 def _as_output_dir(path: Path | str) -> Path:
@@ -341,166 +323,105 @@ def _shared_patch_vector_reference(
     }
 
 
-def _smoothstep(value: torch.Tensor, start: float, end: float) -> torch.Tensor:
-    t = ((value - start) / (end - start)).clamp(0.0, 1.0)
-    return t * t * (3.0 - 2.0 * t)
+def _reshape_reference_field(values: np.ndarray, grid_points: int) -> np.ndarray:
+    return np.asarray(values, dtype=np.float64).reshape(grid_points, grid_points)
 
 
-def _stokes_reference_fields(
-    grid_points: int,
+def _second_derivative(values: np.ndarray, spacing: float, axis: int) -> np.ndarray:
+    first = np.gradient(values, spacing, axis=axis, edge_order=1)
+    return np.gradient(first, spacing, axis=axis, edge_order=1)
+
+
+def _openfoam_reference_fields(
+    config: ExperimentConfig,
     *,
-    viscosity: float,
-    peak_velocity: float,
+    model_name: str,
 ) -> dict[str, np.ndarray]:
-    """Return a deterministic manufactured Stokes streamfunction reference."""
+    """Convert sampled OpenFOAM fields to the vector-model reference schema."""
 
-    coordinates = _grid_coordinates(grid_points).to(dtype=torch.float64).requires_grad_(True)
-    x = coordinates[:, :1]
-    y = coordinates[:, 1:2]
-    inlet_window = _smoothstep(x, 0.0, 0.25)
-    outlet_window = _smoothstep(x, 0.75, 1.0)
-    top_layer = _smoothstep(y, 0.55, 1.0)
-    bottom_layer = 1.0 - _smoothstep(y, 0.0, 0.45)
-    scale = peak_velocity / 6.0
-    streamfunction = scale * (inlet_window * top_layer + outlet_window * bottom_layer)
-    stream_gradient = torch.autograd.grad(
-        streamfunction,
-        coordinates,
-        grad_outputs=torch.ones_like(streamfunction),
-        create_graph=True,
-        retain_graph=True,
-    )[0]
-    u = stream_gradient[:, 1:2]
-    v = -stream_gradient[:, :1]
-    pressure = coordinates[:, :1] * 0.0
-    residuals = stokes_residuals(u, v, pressure, coordinates, viscosity=viscosity)
-    residual_magnitude = torch.sqrt(sum(value.square() for value in residuals.values()))
-    velocity = torch.cat((u, v), dim=1)
+    if config.vector_reference_fields is None:
+        raise ValueError("OpenFOAM vector references require vector_reference_fields")
 
-    return {
-        "u": u.detach().numpy(),
-        "v": v.detach().numpy(),
-        "pressure": pressure.detach().numpy(),
-        "velocity": velocity.detach().numpy(),
-        "speed": torch.linalg.norm(velocity, dim=1, keepdim=True).detach().numpy(),
-        "continuity": residuals["continuity"].detach().numpy(),
-        "x_momentum": residuals["x_momentum"].detach().numpy(),
-        "y_momentum": residuals["y_momentum"].detach().numpy(),
-        "residual": residual_magnitude.detach().numpy(),
-    }
+    source = config.vector_reference_fields
+    grid_points = config.grid_points
+    spacing = 1.0 / float(grid_points - 1)
+    pressure = np.asarray(source["reference_pressure"], dtype=np.float64).reshape(-1, 1)
+    u = np.asarray(source["reference_u"], dtype=np.float64).reshape(-1, 1)
+    v = np.asarray(source["reference_v"], dtype=np.float64).reshape(-1, 1)
+    velocity = np.column_stack((u.reshape(-1), v.reshape(-1)))
+    speed = np.linalg.norm(velocity, axis=1, keepdims=True)
 
-
-def _oseen_reference_fields(
-    grid_points: int,
-    *,
-    viscosity: float,
-    peak_velocity: float,
-) -> dict[str, np.ndarray]:
-    """Return a deterministic manufactured Oseen streamfunction reference."""
-
-    coordinates = _grid_coordinates(grid_points).to(dtype=torch.float64).requires_grad_(True)
-    x = coordinates[:, :1]
-    y = coordinates[:, 1:2]
-    inlet_window = _smoothstep(x, 0.0, 0.25)
-    outlet_window = _smoothstep(x, 0.75, 1.0)
-    top_layer = _smoothstep(y, 0.55, 1.0)
-    bottom_layer = 1.0 - _smoothstep(y, 0.0, 0.45)
-    scale = peak_velocity / 6.0
-    streamfunction = scale * (inlet_window * top_layer + outlet_window * bottom_layer)
-    stream_gradient = torch.autograd.grad(
-        streamfunction,
-        coordinates,
-        grad_outputs=torch.ones_like(streamfunction),
-        create_graph=True,
-        retain_graph=True,
-    )[0]
-    u = stream_gradient[:, 1:2]
-    v = -stream_gradient[:, :1]
-    pressure = coordinates[:, :1] * 0.0
-    convection_velocity = torch.tensor(
-        (peak_velocity, 0.0),
-        dtype=coordinates.dtype,
-        device=coordinates.device,
-    ).reshape(1, 2).expand(coordinates.shape[0], 2)
-    residuals = oseen_residuals(
-        u,
-        v,
-        pressure,
-        coordinates,
-        convection_velocity,
-        viscosity=viscosity,
+    pressure_grid = _reshape_reference_field(pressure, grid_points)
+    u_grid = _reshape_reference_field(u, grid_points)
+    v_grid = _reshape_reference_field(v, grid_points)
+    dp_dx = np.gradient(pressure_grid, spacing, axis=0, edge_order=1)
+    dp_dy = np.gradient(pressure_grid, spacing, axis=1, edge_order=1)
+    du_dx = np.gradient(u_grid, spacing, axis=0, edge_order=1)
+    du_dy = np.gradient(u_grid, spacing, axis=1, edge_order=1)
+    dv_dx = np.gradient(v_grid, spacing, axis=0, edge_order=1)
+    dv_dy = np.gradient(v_grid, spacing, axis=1, edge_order=1)
+    lap_u = _second_derivative(u_grid, spacing, axis=0) + _second_derivative(
+        u_grid,
+        spacing,
+        axis=1,
     )
-    residual_magnitude = torch.sqrt(sum(value.square() for value in residuals.values()))
-    velocity = torch.cat((u, v), dim=1)
+    lap_v = _second_derivative(v_grid, spacing, axis=0) + _second_derivative(
+        v_grid,
+        spacing,
+        axis=1,
+    )
+    continuity = du_dx + dv_dy
 
-    return {
-        "u": u.detach().numpy(),
-        "v": v.detach().numpy(),
-        "pressure": pressure.detach().numpy(),
-        "velocity": velocity.detach().numpy(),
-        "speed": torch.linalg.norm(velocity, dim=1, keepdim=True).detach().numpy(),
-        "continuity": residuals["continuity"].detach().numpy(),
-        "x_momentum": residuals["x_momentum"].detach().numpy(),
-        "y_momentum": residuals["y_momentum"].detach().numpy(),
-        "residual": residual_magnitude.detach().numpy(),
-        "convection_velocity": convection_velocity.detach().numpy(),
+    if model_name == "stokes":
+        x_momentum = -dp_dx + config.viscosity * lap_u
+        y_momentum = -dp_dy + config.viscosity * lap_v
+    elif model_name == "oseen":
+        beta_x = config.peak_velocity
+        beta_y = 0.0
+        x_momentum = beta_x * du_dx + beta_y * du_dy - dp_dx + config.viscosity * lap_u
+        y_momentum = beta_x * dv_dx + beta_y * dv_dy - dp_dy + config.viscosity * lap_v
+    elif model_name == "navier_stokes":
+        x_momentum = (
+            u_grid * du_dx + v_grid * du_dy - dp_dx + config.viscosity * lap_u
+        )
+        y_momentum = (
+            u_grid * dv_dx + v_grid * dv_dy - dp_dy + config.viscosity * lap_v
+        )
+    else:
+        raise ValueError(f"unsupported OpenFOAM vector reference model: {model_name}")
+
+    residual = np.sqrt(continuity**2 + x_momentum**2 + y_momentum**2)
+    fields: dict[str, np.ndarray] = {
+        "u": u,
+        "v": v,
+        "pressure": pressure,
+        "velocity": velocity,
+        "speed": speed,
+        "continuity": continuity.reshape(-1, 1),
+        "x_momentum": x_momentum.reshape(-1, 1),
+        "y_momentum": y_momentum.reshape(-1, 1),
+        "residual": residual.reshape(-1, 1),
     }
+    if model_name == "oseen":
+        fields["convection_velocity"] = np.tile(
+            np.array([[config.peak_velocity, 0.0]], dtype=np.float64),
+            (grid_points * grid_points, 1),
+        )
+    return fields
 
 
-def _oseen_reference_metadata(peak_velocity: float) -> dict[str, object]:
-    metadata = deepcopy(OSEEN_REFERENCE_METADATA)
-    metadata["convection_velocity"] = [float(peak_velocity), 0.0]
+def _openfoam_reference_metadata(
+    config: ExperimentConfig,
+    *,
+    model_name: str,
+) -> dict[str, object]:
+    if config.vector_reference_metadata is None:
+        raise ValueError("OpenFOAM vector references require vector_reference_metadata")
+    metadata = deepcopy(config.vector_reference_metadata)
+    metadata["compared_model"] = model_name
+    metadata["reference_generator_name"] = "openfoam_simplefoam_shared_domain"
+    metadata["reference_kind"] = "dedicated-solver"
     return metadata
-
-
-def _navier_stokes_reference_fields(
-    grid_points: int,
-    *,
-    viscosity: float,
-    peak_velocity: float,
-) -> dict[str, np.ndarray]:
-    """Return a deterministic manufactured Navier-Stokes streamfunction reference."""
-
-    coordinates = _grid_coordinates(grid_points).to(dtype=torch.float64).requires_grad_(True)
-    x = coordinates[:, :1]
-    y = coordinates[:, 1:2]
-    inlet_window = _smoothstep(x, 0.0, 0.25)
-    outlet_window = _smoothstep(x, 0.75, 1.0)
-    top_layer = _smoothstep(y, 0.55, 1.0)
-    bottom_layer = 1.0 - _smoothstep(y, 0.0, 0.45)
-    scale = peak_velocity / 6.0
-    streamfunction = scale * (inlet_window * top_layer + outlet_window * bottom_layer)
-    stream_gradient = torch.autograd.grad(
-        streamfunction,
-        coordinates,
-        grad_outputs=torch.ones_like(streamfunction),
-        create_graph=True,
-        retain_graph=True,
-    )[0]
-    u = stream_gradient[:, 1:2]
-    v = -stream_gradient[:, :1]
-    pressure = coordinates[:, :1] * 0.0
-    residuals = navier_stokes_residuals(
-        u,
-        v,
-        pressure,
-        coordinates,
-        viscosity=viscosity,
-    )
-    residual_magnitude = torch.sqrt(sum(value.square() for value in residuals.values()))
-    velocity = torch.cat((u, v), dim=1)
-
-    return {
-        "u": u.detach().numpy(),
-        "v": v.detach().numpy(),
-        "pressure": pressure.detach().numpy(),
-        "velocity": velocity.detach().numpy(),
-        "speed": torch.linalg.norm(velocity, dim=1, keepdim=True).detach().numpy(),
-        "continuity": residuals["continuity"].detach().numpy(),
-        "x_momentum": residuals["x_momentum"].detach().numpy(),
-        "y_momentum": residuals["y_momentum"].detach().numpy(),
-        "residual": residual_magnitude.detach().numpy(),
-    }
 
 
 def run_darcy_experiment(config: ExperimentConfig | None = None) -> ExperimentResult:
@@ -754,15 +675,33 @@ def _run_shared_patch_vector_experiment(
     )
 
 
+def _openfoam_vector_reference(
+    active: ExperimentConfig,
+    *,
+    model_name: str,
+) -> tuple[str, Callable[[], dict[str, np.ndarray]], dict[str, object]]:
+    if active.vector_reference_source != "openfoam":
+        raise ValueError("vector_reference_source must be 'openfoam'")
+    return (
+        "openfoam_simplefoam_shared_domain",
+        lambda: _openfoam_reference_fields(active, model_name=model_name),
+        _openfoam_reference_metadata(active, model_name=model_name),
+    )
+
+
 def run_poiseuille_navier_stokes_experiment(
     config: ExperimentConfig | None = None,
 ) -> ExperimentResult:
     """Run the Navier-Stokes PINN/reference vertical-slice experiment."""
 
     active = ExperimentConfig() if config is None else config
+    reference, reference_builder, reference_metadata = _openfoam_vector_reference(
+        active,
+        model_name="navier_stokes",
+    )
     return _run_shared_patch_vector_experiment(
         model_name="navier_stokes",
-        reference="manufactured_navier_stokes_streamfunction",
+        reference=reference,
         config=active,
         residual_builder=lambda outputs, coordinates: navier_stokes_residuals(
             outputs["u"],
@@ -771,12 +710,8 @@ def run_poiseuille_navier_stokes_experiment(
             coordinates,
             viscosity=active.viscosity,
         ),
-        reference_builder=lambda: _navier_stokes_reference_fields(
-            active.grid_points,
-            viscosity=active.viscosity,
-            peak_velocity=active.peak_velocity,
-        ),
-        reference_metadata=NAVIER_STOKES_REFERENCE_METADATA,
+        reference_builder=reference_builder,
+        reference_metadata=reference_metadata,
     )
 
 
@@ -784,9 +719,13 @@ def run_stokes_experiment(config: ExperimentConfig | None = None) -> ExperimentR
     """Run the Stokes extension against the shared unit-square patch reference."""
 
     active = ExperimentConfig() if config is None else config
+    reference, reference_builder, reference_metadata = _openfoam_vector_reference(
+        active,
+        model_name="stokes",
+    )
     return _run_shared_patch_vector_experiment(
         model_name="stokes",
-        reference="manufactured_stokes_streamfunction",
+        reference=reference,
         config=active,
         residual_builder=lambda outputs, coordinates: stokes_residuals(
             outputs["u"],
@@ -795,12 +734,8 @@ def run_stokes_experiment(config: ExperimentConfig | None = None) -> ExperimentR
             coordinates,
             viscosity=active.viscosity,
         ),
-        reference_builder=lambda: _stokes_reference_fields(
-            active.grid_points,
-            viscosity=active.viscosity,
-            peak_velocity=active.peak_velocity,
-        ),
-        reference_metadata=STOKES_REFERENCE_METADATA,
+        reference_builder=reference_builder,
+        reference_metadata=reference_metadata,
     )
 
 
@@ -827,17 +762,18 @@ def run_oseen_experiment(config: ExperimentConfig | None = None) -> ExperimentRe
             viscosity=active.viscosity,
         )
 
+    reference, reference_builder, reference_metadata = _openfoam_vector_reference(
+        active,
+        model_name="oseen",
+    )
+
     return _run_shared_patch_vector_experiment(
         model_name="oseen",
-        reference="manufactured_oseen_streamfunction",
+        reference=reference,
         config=active,
         residual_builder=residual_builder,
-        reference_builder=lambda: _oseen_reference_fields(
-            active.grid_points,
-            viscosity=active.viscosity,
-            peak_velocity=active.peak_velocity,
-        ),
-        reference_metadata=_oseen_reference_metadata(active.peak_velocity),
+        reference_builder=reference_builder,
+        reference_metadata=reference_metadata,
     )
 
 
@@ -886,14 +822,8 @@ __all__ = [
     "TrainingHistory",
     "COORDINATE_CONVENTION_METADATA",
     "DARCY_REFERENCE_METADATA",
-    "NAVIER_STOKES_REFERENCE_METADATA",
-    "OSEEN_REFERENCE_METADATA",
     "SHARED_PATCH_VECTOR_REFERENCE_METADATA",
-    "STOKES_REFERENCE_METADATA",
     "_fd_darcy_reference_fields",
-    "_navier_stokes_reference_fields",
-    "_oseen_reference_fields",
-    "_stokes_reference_fields",
     "run_all_experiments",
     "run_darcy_experiment",
     "run_oseen_experiment",

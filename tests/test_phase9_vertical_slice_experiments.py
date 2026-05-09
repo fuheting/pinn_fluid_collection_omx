@@ -44,8 +44,8 @@ def test_darcy_experiment_saves_fields_history_residuals_and_metrics(tmp_path):
     assert (tmp_path / result.artifacts["field_plot_png"]).is_file()
 
 
-def test_navier_stokes_experiment_uses_model_specific_reference(tmp_path):
-    config = ExperimentConfig(
+def test_navier_stokes_experiment_uses_model_specific_reference(tmp_path, openfoam_config_factory):
+    config = openfoam_config_factory(
         output_dir=tmp_path,
         grid_points=5,
         training_steps=4,
@@ -59,7 +59,7 @@ def test_navier_stokes_experiment_uses_model_specific_reference(tmp_path):
     result = run_poiseuille_navier_stokes_experiment(config)
 
     assert result.model == "navier_stokes"
-    assert result.reference == "manufactured_navier_stokes_streamfunction"
+    assert result.reference == "openfoam_simplefoam_shared_domain"
     assert result.history.reduced
     assert set(result.history.components) == {
         "continuity",

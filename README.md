@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-The current phase added an OpenFOAM-oriented dedicated reference path. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel reference, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, summary metrics, and explicit reference metadata, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, a documented inventory of the locally procured model-specific paper-demo bundle, and OpenFOAM case-generation/import utilities that write figure-compatible artifacts without replacing the regression-friendly in-repo references.
+The current phase uses OpenFOAM-solved pressure and velocity fields as the only active vector-model actual/reference path. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel residual benchmark, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, summary metrics, and explicit reference metadata, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, segmented OpenFOAM case generation for the shared top-left inlet and bottom-right outlet, and OpenFOAM-backed vector references for Stokes, Oseen, and Navier-Stokes.
 
 ## Planned Phases
 
@@ -34,11 +34,13 @@ The current phase added an OpenFOAM-oriented dedicated reference path. The repos
 | 14 | Result-procurement documentation, figure inventory, and limitations | Complete |
 | 15 | Reference-generation audit and metadata contracts | Complete |
 | 16 | Darcy ground truth hardening | Complete |
-| 17 | Stokes model-specific manufactured ground truth | Complete |
+| 17 | Stokes model-specific manufactured ground truth | Superseded by OpenFOAM-only vector references |
 | 18 | Oseen model-specific ground truth | Complete |
 | 19 | Navier-Stokes model-specific ground truth | Complete |
 | 20 | True performance comparison run with model-specific actual fields | Complete |
 | 21 | Dedicated OpenFOAM reference case generation and field import | Complete |
+| 22 | OpenFOAM-backed vector-model actual fields and PINN rerun | Complete |
+| 23 | Remove manufactured streamfunction vector references from active experiment flow | Complete |
 
 ## Repository Layout
 
@@ -257,19 +259,20 @@ Phases 8-10 add `pinn_fluid.experiments` for lightweight local comparisons as ph
 - `ExperimentResult` stores model name, reference source, grid shape, metrics, and artifact paths.
 - `ExperimentResult` stores reference metadata with the generator name, PDE model represented by the reference, boundary condition type, coordinate convention, and reference kind.
 - `run_darcy_experiment(...)` trains a small Darcy pressure field and compares it to an in-repo finite-difference Laplace reference on a deterministic grid. The Darcy actual field now exposes pressure, `u`, `v`, speed, and a finite-difference Laplace residual diagnostic.
-- `run_poiseuille_navier_stokes_experiment(...)` keeps the historical API name but now trains a small velocity-pressure field on the same shared unit-square patch geometry as Darcy and compares it to a Navier-Stokes manufactured streamfunction reference.
+- `run_poiseuille_navier_stokes_experiment(...)` keeps the historical API name but now trains a small velocity-pressure field on the same shared unit-square patch geometry as Darcy and compares it to an OpenFOAM-sampled pressure/velocity reference.
 - `run_stokes_experiment(...)` and `run_oseen_experiment(...)` use the same shared-patch boundary setup so the vector-flow comparisons are no longer horizontal channel-flow artifacts.
-- The vector experiments save reference `u`, `v`, pressure, speed, and residual-diagnostic fields from their model-specific manufactured references.
+- The vector experiments save reference `u`, `v`, pressure, speed, and residual-diagnostic fields from OpenFOAM-sampled pressure/velocity fields. The previous manufactured streamfunction builders are no longer part of the active experiment flow.
 - Current reference metadata is:
 
 | Model | Reference generator | PDE represented | Reference kind |
 | --- | --- | --- | --- |
 | Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
-| Stokes | `stokes_streamfunction_reference` | Stokes incompressible momentum and continuity | manufactured |
-| Oseen | `oseen_streamfunction_reference` | Oseen incompressible momentum and continuity | manufactured |
-| Navier-Stokes | `navier_stokes_streamfunction_reference` | Navier-Stokes incompressible momentum and continuity | manufactured |
+| Stokes | `openfoam_simplefoam_shared_domain` | OpenFOAM incompressible steady laminar flow | dedicated-solver |
+| Oseen | `openfoam_simplefoam_shared_domain` | OpenFOAM incompressible steady laminar flow | dedicated-solver |
+| Navier-Stokes | `openfoam_simplefoam_shared_domain` | OpenFOAM incompressible steady laminar flow | dedicated-solver |
 
 All four references use the Cartesian unit-square convention: `x` increases left-to-right, `y=0` is bottom, `y=1` is top, the inlet is the top-left horizontal patch, and the outlet is the bottom-right horizontal patch. Grid coordinates flatten in x-major order with y varying fastest, while plotting reshapes fields with `reshape(grid_points, grid_points).T` and `origin="lower"`.
+Stokes/Oseen/Navier-Stokes direct experiment calls require prepared OpenFOAM reference fields in `ExperimentConfig`; the procurement runner prepares those fields from either a supplied OpenFOAM sample or a generated local OpenFOAM case.
 - `run_all_experiments(...)` runs Darcy, Stokes, Oseen, and Navier-Stokes in order and writes a consolidated JSON and Markdown report.
 
 Each experiment writes reproducible numeric artifacts under the configured output directory:
@@ -759,7 +762,31 @@ PYTHONPATH=src python -c "from pinn_fluid.figures import generate_figure_bundle;
 
 The verified local sample path was `data/openfoam_phase21/case/postProcessing/sampleDict/50/sharedDomainGrid.xy`, with 961 sampled points plus one header row for a 31 by 31 grid.
 
-Limitations: generated OpenFOAM and figure artifacts remain ignored under `data/` and are not committed. The first case is an OpenFOAM-compatible whole-patch approximation of the shared top-left inlet and bottom-right outlet geometry; a later phase should add a segmented OpenFOAM mesh before making physical validation claims. The imported bundle mirrors OpenFOAM sample fields into `predicted_*` keys only to reuse existing figure panels for a reference self-comparison.
+The OpenFOAM writer now segments the top and bottom boundaries so the executable case uses the shared top-left inlet (`x in [0.0, 0.25]`, `y=1`) and bottom-right outlet (`x in [0.75, 1.0]`, `y=0`) rather than whole top/bottom patches.
+
+Run the PINN comparison with OpenFOAM-solved vector references:
+
+```bash
+PYTHONPATH=src python -m pinn_fluid.result_procurement \
+  --output-dir data/openfoam_vector_predictions_2026_05_09 \
+  --grid-points 41 \
+  --training-steps 800 \
+  --hidden-width 24 \
+  --hidden-layers 2 \
+  --learning-rate 0.01 \
+  --seed 0 \
+  --viscosity 0.25 \
+  --peak-velocity 1.0 \
+  --darcy-reference-iterations 1200 \
+  --vector-reference-source openfoam \
+  --openfoam-end-time 50 \
+  --git-commit openfoam-vector-predictions-2026-05-09
+PYTHONPATH=src python -m pinn_fluid.figures data/openfoam_vector_predictions_2026_05_09
+```
+
+Darcy still uses `fd_darcy_reference`, while Stokes, Oseen, and Navier-Stokes use `openfoam_simplefoam_shared_domain`. `--vector-reference-source` now accepts only `openfoam`; if `--openfoam-reference-sample-path` is omitted, result procurement generates and runs the local OpenFOAM case. The OpenFOAM sample is imported into the existing `fields.npz` schema and finite-difference residual diagnostics are computed from the sampled pressure/velocity fields for each vector model.
+
+Limitations: generated OpenFOAM cases, meshes, logs, `.npz`, `.json`, and `.png` artifacts remain ignored under `data/` and are not committed unless explicitly requested. The vector references are external OpenFOAM laminar incompressible-flow samples reused across Stokes, Oseen, and Navier-Stokes diagnostics; they are no longer manufactured fields, but the residual diagnostics are finite-difference post-processing on the sampled grid rather than OpenFOAM's native equation residuals.
 
 ## Environment Direction
 
@@ -781,6 +808,6 @@ python -m pytest
 
 ## Continuing The Model Phases
 
-The remaining research work is to run broader comparison studies with selected grid sizes and training budgets, then add a dedicated external CFD/scientific-computing reference-solver phase for validation-quality benchmarks. Keep those studies separate from the lightweight regression-oriented defaults in `pinn_fluid.experiments`.
+The remaining research work is to run broader comparison studies with selected grid sizes and training budgets, then tighten the OpenFOAM residual/metadata pipeline toward validation-quality benchmarks. Keep generated studies separate from the lightweight regression-oriented defaults in `pinn_fluid.experiments`.
 
 New agents should start with this `README.md` and `progress.md`. Continue the established style: tests first, narrow implementation, docs/progress update, fresh verification, Lore commit, then push `origin main` with the temp gitdir/worktree command when needed. Split the result-procurement work into staged phases rather than trying to produce the full study in one pass.

@@ -78,8 +78,8 @@ def test_coordinate_flattening_and_figure_reshape_keep_y_up_orientation():
     ]
 
 
-def test_experiment_results_and_artifacts_record_reference_metadata(tmp_path):
-    config = ExperimentConfig(
+def test_experiment_results_and_artifacts_record_reference_metadata(tmp_path, openfoam_config_factory):
+    config = openfoam_config_factory(
         output_dir=tmp_path,
         grid_points=5,
         training_steps=4,
@@ -106,13 +106,17 @@ def test_experiment_results_and_artifacts_record_reference_metadata(tmp_path):
         "coordinate_convention": EXPECTED_COORDINATE_CONVENTION,
         "reference_kind": "finite-difference",
     }
-    assert metadata_by_model["navier_stokes"] == {
-        "reference_generator_name": "navier_stokes_streamfunction_reference",
-        "pde_model_represented": "Navier-Stokes incompressible momentum and continuity",
-        "boundary_condition_type": "manufactured velocity inlet/outlet with no-slip horizontal solid walls",
-        "coordinate_convention": EXPECTED_COORDINATE_CONVENTION,
-        "reference_kind": "manufactured",
-    }
+    assert metadata_by_model["navier_stokes"]["reference_generator_name"] == (
+        "openfoam_simplefoam_shared_domain"
+    )
+    assert metadata_by_model["navier_stokes"]["pde_model_represented"] == (
+        "OpenFOAM incompressible steady laminar flow"
+    )
+    assert metadata_by_model["navier_stokes"]["coordinate_convention"] == (
+        EXPECTED_COORDINATE_CONVENTION
+    )
+    assert metadata_by_model["navier_stokes"]["reference_kind"] == "dedicated-solver"
+    assert metadata_by_model["navier_stokes"]["compared_model"] == "navier_stokes"
 
     for result in results:
         with np.load(tmp_path / result.artifacts["fields_npz"]) as fields:
@@ -139,7 +143,8 @@ def test_legacy_shared_patch_vector_reference_remains_available_for_contract_aud
     assert np.array_equal(expected["v"], velocity[:, 1:2])
 
 
-def test_procurement_manifest_records_reference_metadata(tmp_path):
+def test_procurement_manifest_records_reference_metadata(tmp_path, openfoam_sample_writer):
+    sample_path = openfoam_sample_writer(tmp_path / "sharedDomainGrid.xy", grid_points=5)
     config = ExperimentConfig(
         output_dir=tmp_path / "procured",
         grid_points=5,
@@ -150,6 +155,7 @@ def test_procurement_manifest_records_reference_metadata(tmp_path):
         seed=5,
         viscosity=0.25,
         darcy_reference_iterations=20,
+        openfoam_reference_sample_path=sample_path,
     )
 
     manifest = run_result_procurement(config, git_commit="phase15-test")
@@ -160,4 +166,4 @@ def test_procurement_manifest_records_reference_metadata(tmp_path):
         if entry["model"] == "darcy":
             assert entry["reference_metadata"]["reference_kind"] == "finite-difference"
         elif entry["model"] in {"stokes", "oseen", "navier_stokes"}:
-            assert entry["reference_metadata"]["reference_kind"] == "manufactured"
+            assert entry["reference_metadata"]["reference_kind"] == "dedicated-solver"

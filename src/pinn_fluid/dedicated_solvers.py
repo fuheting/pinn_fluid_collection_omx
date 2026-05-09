@@ -77,6 +77,113 @@ def _openfoam_sample_points(grid_points: int) -> str:
     return "\n".join(lines)
 
 
+def _openfoam_block_mesh(cells: int) -> str:
+    x_values = (0.0, 0.25, 0.75, 1.0)
+    left_cells = max(1, round(cells * 0.25))
+    right_cells = max(1, round(cells * 0.25))
+    middle_cells = max(1, cells - left_cells - right_cells)
+    cell_counts = (left_cells, middle_cells, right_cells)
+
+    def vertex_index(ix: int, iy: int, iz: int) -> int:
+        return iz * 8 + iy * 4 + ix
+
+    vertices = []
+    for z in (0.0, 0.01):
+        for y in (0.0, 1.0):
+            for x in x_values:
+                vertices.append(f"    ({x:g} {y:g} {z:g})")
+
+    blocks = []
+    for ix, x_cells in enumerate(cell_counts):
+        blocks.append(
+            "    hex "
+            f"({vertex_index(ix, 0, 0)} {vertex_index(ix + 1, 0, 0)} "
+            f"{vertex_index(ix + 1, 1, 0)} {vertex_index(ix, 1, 0)} "
+            f"{vertex_index(ix, 0, 1)} {vertex_index(ix + 1, 0, 1)} "
+            f"{vertex_index(ix + 1, 1, 1)} {vertex_index(ix, 1, 1)}) "
+            f"({x_cells} {cells} 1) simpleGrading (1 1 1)"
+        )
+
+    bottom_faces = [
+        f"            ({vertex_index(ix, 0, 0)} {vertex_index(ix + 1, 0, 0)} "
+        f"{vertex_index(ix + 1, 0, 1)} {vertex_index(ix, 0, 1)})"
+        for ix in range(3)
+    ]
+    top_faces = [
+        f"            ({vertex_index(ix, 1, 0)} {vertex_index(ix + 1, 1, 0)} "
+        f"{vertex_index(ix + 1, 1, 1)} {vertex_index(ix, 1, 1)})"
+        for ix in range(3)
+    ]
+    front_faces = [
+        f"            ({vertex_index(ix, 0, 0)} {vertex_index(ix, 1, 0)} "
+        f"{vertex_index(ix + 1, 1, 0)} {vertex_index(ix + 1, 0, 0)})"
+        for ix in range(3)
+    ]
+    back_faces = [
+        f"            ({vertex_index(ix, 0, 1)} {vertex_index(ix + 1, 0, 1)} "
+        f"{vertex_index(ix + 1, 1, 1)} {vertex_index(ix, 1, 1)})"
+        for ix in range(3)
+    ]
+    side_faces = [
+        f"            ({vertex_index(0, 0, 0)} {vertex_index(0, 0, 1)} "
+        f"{vertex_index(0, 1, 1)} {vertex_index(0, 1, 0)})",
+        f"            ({vertex_index(3, 0, 0)} {vertex_index(3, 1, 0)} "
+        f"{vertex_index(3, 1, 1)} {vertex_index(3, 0, 1)})",
+    ]
+    wall_faces = [bottom_faces[0], bottom_faces[1], top_faces[1], top_faces[2], *side_faces]
+
+    return f"""
+convertToMeters 1;
+
+vertices
+(
+{chr(10).join(vertices)}
+);
+
+blocks
+(
+{chr(10).join(blocks)}
+);
+
+boundary
+(
+    inlet
+    {{
+        type patch;
+        faces
+        (
+{top_faces[0]}
+        );
+    }}
+    outlet
+    {{
+        type patch;
+        faces
+        (
+{bottom_faces[2]}
+        );
+    }}
+    walls
+    {{
+        type wall;
+        faces
+        (
+{chr(10).join(wall_faces)}
+        );
+    }}
+    frontAndBack
+    {{
+        type empty;
+        faces
+        (
+{chr(10).join(front_faces)}
+{chr(10).join(back_faces)}
+        );
+    }}
+);
+"""
+
+
 def write_openfoam_shared_domain_case(
     case_dir: Path | str,
     config: OpenFOAMCaseConfig | None = None,
@@ -90,59 +197,7 @@ def write_openfoam_shared_domain_case(
 
     _write(
         root / "system/blockMeshDict",
-        _foam_header("dictionary", "blockMeshDict")
-        + f"""
-convertToMeters 1;
-
-vertices
-(
-    (0 0 0)
-    (1 0 0)
-    (1 1 0)
-    (0 1 0)
-    (0 0 0.01)
-    (1 0 0.01)
-    (1 1 0.01)
-    (0 1 0.01)
-);
-
-blocks
-(
-    hex (0 1 2 3 4 5 6 7) ({cells} {cells} 1) simpleGrading (1 1 1)
-);
-
-boundary
-(
-    inlet
-    {{
-        type patch;
-        faces ((3 7 6 2));
-    }}
-    outlet
-    {{
-        type patch;
-        faces ((0 1 5 4));
-    }}
-    walls
-    {{
-        type wall;
-        faces
-        (
-            (0 4 7 3)
-            (1 2 6 5)
-        );
-    }}
-    frontAndBack
-    {{
-        type empty;
-        faces
-        (
-            (0 3 2 1)
-            (4 5 6 7)
-        );
-    }}
-);
-""",
+        _foam_header("dictionary", "blockMeshDict") + _openfoam_block_mesh(cells),
     )
     _write(
         root / "0/U",

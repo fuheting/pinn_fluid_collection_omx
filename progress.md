@@ -42,11 +42,13 @@ Explicitly not completed:
 | 14 | Result-procurement documentation, figure inventory, and limitations | Complete |
 | 15 | Reference-generation audit and metadata contracts | Complete |
 | 16 | Darcy ground truth hardening | Complete |
-| 17 | Stokes model-specific manufactured ground truth | Complete |
+| 17 | Stokes model-specific manufactured ground truth | Superseded by OpenFOAM-only vector references |
 | 18 | Oseen model-specific ground truth | Complete |
 | 19 | Navier-Stokes model-specific ground truth | Complete |
 | 20 | True performance comparison run with model-specific actual fields | Complete |
 | 21 | Dedicated OpenFOAM reference case generation and field import | Complete |
+| 22 | OpenFOAM-backed vector-model actual fields and PINN rerun | Complete |
+| 23 | Remove manufactured streamfunction vector references from active experiment flow | Complete |
 
 ## Phase 2: Darcy Flow
 
@@ -850,3 +852,155 @@ Required workflow for future phases or follow-up studies:
 - Update docs and progress in the same phase.
 - Verify with targeted tests, `python -m pytest`, `git diff --check`, and diagnostics or `py_compile` where useful.
 - Commit with the Lore protocol and push `origin main`.
+
+## Vector Reference Pressure Solver Review
+
+Status: follow-up bug fix complete.
+
+Finding:
+
+- The Stokes, Oseen, and Navier-Stokes manufactured reference builders were still using `pressure = 0` everywhere.
+- That made the "actual" pressure panels constant and removed `grad(p)` from the model-specific residual diagnostics for the vector references.
+- The issue was in `pinn_fluid.experiments`, not the plotting pipeline; saved `reference_pressure` arrays for Stokes/Oseen/Navier-Stokes had zero range.
+
+Changes:
+
+- Added regression tests that require nonconstant vector-model reference pressure.
+- Replaced the zero-pressure placeholder with a differentiable smooth pressure potential anchored to the shared top-left inlet and bottom-right outlet.
+- Added model-specific dynamic pressure corrections for Stokes, Oseen, and Navier-Stokes manufactured references.
+- Recorded the manufactured pressure model in reference metadata.
+
+Reference generators after the pressure fix:
+
+- Darcy PINN experiment: `fd_darcy_reference`
+- Stokes PINN experiment: `stokes_streamfunction_reference`
+- Oseen PINN experiment: `oseen_streamfunction_reference`
+- Navier-Stokes PINN experiment: `navier_stokes_streamfunction_reference`
+- OpenFOAM dedicated bundle: `openfoam_simplefoam_shared_domain`
+
+Limitations:
+
+- The vector reference pressures are still manufactured fields for regression-friendly comparison and residual diagnostics.
+- They are no longer constant placeholders, but they are not a substitute for segmented-mesh OpenFOAM or another dedicated CFD pressure solve.
+
+Verification:
+
+- Failing test first: `python -m pytest tests/test_phase17_stokes_reference.py tests/test_phase18_oseen_reference.py tests/test_phase19_navier_stokes_reference.py` failed on zero pressure range for Stokes, Oseen, and Navier-Stokes.
+- After implementation, the same targeted command passed.
+
+## Phase 22: OpenFOAM-Backed Vector Actual Fields
+
+Status: complete.
+
+What changed:
+
+- Added `ExperimentConfig.vector_reference_source`.
+- Added OpenFOAM reference preparation in `pinn_fluid.result_procurement`.
+- Added `--vector-reference-source openfoam`, `--openfoam-reference-sample-path`, `--openfoam-case-dir`, and `--openfoam-end-time` CLI options.
+- Stokes, Oseen, and Navier-Stokes can now use OpenFOAM-sampled pressure and velocity fields as their actual/reference fields.
+- The OpenFOAM case writer now segments the top and bottom mesh boundaries so the executable case matches the shared geometry:
+  - inlet: top-left horizontal segment, `x in [0.0, 0.25]`, `y=1`
+  - outlet: bottom-right horizontal segment, `x in [0.75, 1.0]`, `y=0`
+  - walls: remaining perimeter
+- Added finite-difference post-processing of sampled OpenFOAM fields to produce per-model continuity, x-momentum, y-momentum, and residual-magnitude diagnostics for Stokes, Oseen, and Navier-Stokes.
+- Added regression tests proving the OpenFOAM vector-reference path does not use manufactured metadata or manufactured reference generators.
+
+Reference generators after Phase 22:
+
+- Darcy PINN experiment: `fd_darcy_reference`
+- Stokes PINN experiment with `--vector-reference-source openfoam`: `openfoam_simplefoam_shared_domain`
+- Oseen PINN experiment with `--vector-reference-source openfoam`: `openfoam_simplefoam_shared_domain`
+- Navier-Stokes PINN experiment with `--vector-reference-source openfoam`: `openfoam_simplefoam_shared_domain`
+
+Artifacts produced by the OpenFOAM-backed comparison:
+
+- `run_manifest.json`
+- per-model `fields.npz`, `history.json`, `metrics.json`, and raw field/loss plots
+- `summary/cross_model_report.json`
+- `summary/cross_model_report.md`
+- OpenFOAM case files and sampled output under `openfoam_case/`
+- figure manifest, field panels, scalar field images, convergence panels, and quiver diagnostics after running `pinn_fluid.figures`
+
+Local run:
+
+```bash
+PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/openfoam_vector_predictions_2026_05_09 --grid-points 41 --training-steps 800 --hidden-width 24 --hidden-layers 2 --learning-rate 0.01 --seed 0 --viscosity 0.25 --peak-velocity 1.0 --darcy-reference-iterations 1200 --vector-reference-source openfoam --openfoam-end-time 50 --git-commit openfoam-vector-predictions-2026-05-09
+PYTHONPATH=src python -m pinn_fluid.figures data/openfoam_vector_predictions_2026_05_09
+```
+
+Local artifact evidence:
+
+- `data/openfoam_vector_predictions_2026_05_09/openfoam_case/postProcessing/sampleDict/50/sharedDomainGrid.xy`
+- `data/openfoam_vector_predictions_2026_05_09/run_manifest.json`
+- `data/openfoam_vector_predictions_2026_05_09/{darcy,stokes,oseen,navier_stokes}/fields.npz`
+- `data/openfoam_vector_predictions_2026_05_09/figures/figure_manifest.json`
+
+Run result summary:
+
+- `all_metrics_finite=true`
+- `all_histories_decreased=true`
+- grid shape: `41 x 41`
+- vector reference generator: `openfoam_simplefoam_shared_domain`
+
+Limitations:
+
+- Darcy remains on the finite-difference Darcy reference because OpenFOAM solves incompressible velocity-pressure flow, not Darcy porous-media flow.
+- Stokes, Oseen, and Navier-Stokes share one OpenFOAM laminar-flow sample as external pressure/velocity ground truth for this phase.
+- Reference residual diagnostics are finite-difference diagnostics computed from sampled OpenFOAM fields; they are not native OpenFOAM solver residual histories.
+- Generated artifacts under `data/` remain ignored and should not be committed unless explicitly requested.
+
+Verification:
+
+- Red test: `python -m pytest tests/test_phase22_openfoam_experiment_references.py` failed before the OpenFOAM vector-reference config existed.
+- Red geometry test: `python -m pytest tests/test_phase21_dedicated_solver_reference.py` failed before the blockMesh writer had segmented inlet/outlet coordinates.
+- Targeted green tests: `python -m pytest tests/test_phase21_dedicated_solver_reference.py tests/test_phase22_openfoam_experiment_references.py`.
+- Real OpenFOAM smoke run: `PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/openfoam_vector_smoke_2026_05_09 --grid-points 9 --training-steps 4 --hidden-width 6 --hidden-layers 1 --learning-rate 0.03 --seed 22 --viscosity 0.25 --peak-velocity 1.0 --darcy-reference-iterations 20 --vector-reference-source openfoam --openfoam-end-time 50 --git-commit openfoam-vector-smoke-2026-05-09`.
+- Full OpenFOAM-backed PINN run and figure generation commands are listed above.
+
+## Phase 23: Remove Manufactured Streamfunction Vector References
+
+Status: complete.
+
+What changed:
+
+- Removed the manufactured Stokes, Oseen, and Navier-Stokes streamfunction reference builders from `pinn_fluid.experiments`.
+- Removed the active manufactured vector-reference branch and metadata constants from the vector experiment APIs.
+- Changed `ExperimentConfig.vector_reference_source` to default to `openfoam`.
+- Changed result procurement so `--vector-reference-source` accepts only `openfoam`.
+- Updated Stokes, Oseen, Navier-Stokes, consolidated experiment, and procurement tests to use OpenFOAM-style sample fields.
+- Added shared test fixtures for deterministic OpenFOAM-style sample fields without adding generated artifacts under `data/`.
+
+Reference generators after Phase 23:
+
+- Darcy PINN experiment: `fd_darcy_reference`
+- Stokes PINN experiment: `openfoam_simplefoam_shared_domain`
+- Oseen PINN experiment: `openfoam_simplefoam_shared_domain`
+- Navier-Stokes PINN experiment: `openfoam_simplefoam_shared_domain`
+
+Artifacts produced:
+
+- Same experiment artifact schema as Phase 22: per-model `fields.npz`, `history.json`, `metrics.json`, plots, summary reports, and figure bundles.
+- Vector-model `fields.npz` files continue to include reference `u`, `v`, pressure, speed, continuity, x/y momentum diagnostics, residual magnitude, and `reference_metadata_json`.
+- Generated OpenFOAM/PINN outputs remain ignored under `data/` unless explicitly approved for commit.
+
+Commands:
+
+```bash
+PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/openfoam_vector_predictions_2026_05_09 --grid-points 41 --training-steps 800 --hidden-width 24 --hidden-layers 2 --learning-rate 0.01 --seed 0 --viscosity 0.25 --peak-velocity 1.0 --darcy-reference-iterations 1200 --vector-reference-source openfoam --openfoam-end-time 50 --git-commit openfoam-vector-predictions-2026-05-09
+PYTHONPATH=src python -m pinn_fluid.figures data/openfoam_vector_predictions_2026_05_09
+```
+
+Limitations:
+
+- Darcy remains a finite-difference pressure Laplace reference.
+- Stokes, Oseen, and Navier-Stokes share one OpenFOAM incompressible laminar-flow sample as the pressure/velocity reference for this benchmark geometry.
+- Reference residual diagnostics are still finite-difference post-processing of sampled fields, not native OpenFOAM residual histories.
+- The analytic Poiseuille helper remains as a residual benchmark, not as active vector ground truth.
+- The legacy Darcy-derived shared-patch vector helper remains only for the Phase 15 contract audit and is not used by the active vector experiment flow.
+
+Verification:
+
+- Red test: `python -m pytest tests/test_phase22_openfoam_experiment_references.py -q` failed while `ExperimentConfig.vector_reference_source` still defaulted to `manufactured`.
+- Targeted tests: `python -m pytest tests/test_phase9_vertical_slice_experiments.py tests/test_phase10_consolidated_experiments.py tests/test_phase15_reference_contracts.py tests/test_phase17_stokes_reference.py tests/test_phase18_oseen_reference.py tests/test_phase19_navier_stokes_reference.py tests/test_phase20_comparison_run_contracts.py tests/test_phase22_openfoam_experiment_references.py -q`.
+- Full suite: `python -m pytest`.
+- Whitespace check: `git diff --check`.

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import fields
+from dataclasses import fields, replace
 import json
 import math
 from pathlib import Path
@@ -16,6 +16,8 @@ from pinn_fluid.experiments import ExperimentConfig, ExperimentResult, run_all_e
 def _config_payload(config: ExperimentConfig) -> dict[str, Any]:
     payload: dict[str, Any] = {}
     for field in fields(config):
+        if field.name == "vector_reference_fields":
+            continue
         value = getattr(config, field.name)
         payload[field.name] = str(value) if isinstance(value, Path) else value
     return payload
@@ -103,6 +105,7 @@ def run_result_procurement(
     active = ExperimentConfig() if config is None else config
     output_dir = Path(active.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    active = _prepare_vector_reference_config(active)
     resolved_commit = git_commit or _git_commit(
         git_dir=Path(git_dir) if git_dir is not None else None,
         work_tree=Path(work_tree) if work_tree is not None else None,
@@ -117,6 +120,75 @@ def run_result_procurement(
         json.dumps(manifest, indent=2, sort_keys=True)
     )
     return manifest
+
+
+def _run_openfoam_command(command: list[str]) -> None:
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            f"{command[0]} was not found; install OpenFOAM before using OpenFOAM references"
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        detail = exc.stderr.strip() or exc.stdout.strip() or str(exc)
+        raise RuntimeError(f"OpenFOAM command failed ({' '.join(command)}): {detail}") from exc
+
+
+def _solve_openfoam_reference(active: ExperimentConfig) -> Path:
+    from pinn_fluid.dedicated_solvers import OpenFOAMCaseConfig, write_openfoam_shared_domain_case
+
+    case_dir = Path(active.openfoam_case_dir or Path(active.output_dir) / "openfoam_case")
+    write_openfoam_shared_domain_case(
+        case_dir,
+        OpenFOAMCaseConfig(
+            grid_points=active.grid_points,
+            viscosity=active.viscosity,
+            inlet_velocity=active.peak_velocity,
+            end_time=active.openfoam_end_time,
+        ),
+    )
+    _run_openfoam_command(["blockMesh", "-case", str(case_dir)])
+    _run_openfoam_command(["foamRun", "-solver", "incompressibleFluid", "-case", str(case_dir)])
+    _run_openfoam_command(["postProcess", "-func", "sampleDict", "-latestTime", "-case", str(case_dir)])
+    sample_path = (
+        case_dir
+        / "postProcessing"
+        / "sampleDict"
+        / str(active.openfoam_end_time)
+        / "sharedDomainGrid.xy"
+    )
+    if not sample_path.is_file():
+        candidates = sorted((case_dir / "postProcessing" / "sampleDict").glob("*/sharedDomainGrid.xy"))
+        if not candidates:
+            raise RuntimeError(f"OpenFOAM sample was not written under {case_dir}")
+        sample_path = candidates[-1]
+    return sample_path
+
+
+def _prepare_vector_reference_config(active: ExperimentConfig) -> ExperimentConfig:
+    if active.vector_reference_source != "openfoam":
+        raise ValueError("vector_reference_source must be 'openfoam'")
+
+    from pinn_fluid.dedicated_solvers import OPENFOAM_REFERENCE_METADATA, import_openfoam_sampled_fields
+
+    sample_path = (
+        Path(active.openfoam_reference_sample_path)
+        if active.openfoam_reference_sample_path is not None
+        else _solve_openfoam_reference(active)
+    )
+    imported = import_openfoam_sampled_fields(
+        sample_path,
+        grid_points=active.grid_points,
+        metadata=OPENFOAM_REFERENCE_METADATA,
+    )
+    metadata = dict(OPENFOAM_REFERENCE_METADATA)
+    metadata["sample_path"] = str(sample_path)
+    return replace(
+        active,
+        openfoam_reference_sample_path=sample_path,
+        vector_reference_fields=imported,
+        vector_reference_metadata=metadata,
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -141,6 +213,14 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--git-commit", default=None)
     parser.add_argument("--git-dir", default=None)
     parser.add_argument("--work-tree", default=None)
+    parser.add_argument(
+        "--vector-reference-source",
+        choices=("openfoam",),
+        default=defaults.vector_reference_source,
+    )
+    parser.add_argument("--openfoam-reference-sample-path", default=None)
+    parser.add_argument("--openfoam-case-dir", default=None)
+    parser.add_argument("--openfoam-end-time", type=int, default=defaults.openfoam_end_time)
     return parser
 
 
@@ -159,6 +239,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         viscosity=args.viscosity,
         peak_velocity=args.peak_velocity,
         darcy_reference_iterations=args.darcy_reference_iterations,
+        vector_reference_source=args.vector_reference_source,
+        openfoam_reference_sample_path=args.openfoam_reference_sample_path,
+        openfoam_case_dir=args.openfoam_case_dir,
+        openfoam_end_time=args.openfoam_end_time,
     )
     manifest = run_result_procurement(
         config,

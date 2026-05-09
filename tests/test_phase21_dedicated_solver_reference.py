@@ -48,6 +48,9 @@ def test_openfoam_case_writer_records_shared_domain_geometry(tmp_path):
     assert "outlet" in block_mesh
     assert "frontAndBack" in block_mesh
     assert "empty" in block_mesh
+    assert "(0.25 1 0)" in block_mesh
+    assert "(0.75 0 0)" in block_mesh
+    assert "hex (0 1 5 4 8 9 13 12)" in block_mesh
 
     momentum_transport = (case_dir / "constant/momentumTransport").read_text()
     physical_properties = (case_dir / "constant/physicalProperties").read_text()
