@@ -49,6 +49,10 @@ Explicitly not completed:
 | 21 | Dedicated OpenFOAM reference case generation and field import | Complete |
 | 22 | OpenFOAM-backed vector-model actual fields and PINN rerun | Complete |
 | 23 | Remove manufactured streamfunction vector references from active experiment flow | Complete |
+| 24 | Align Darcy boundary conditions with Navier-Stokes and use OpenFOAM Darcy ground truth | Complete |
+| 25 | Reject shared OpenFOAM ground truth across PDE models | Complete |
+| 26 | Switch active dedicated reference path to FEniCSx | Complete |
+| 27 | FEniCSx model-specific solver generation | Complete |
 
 ## Phase 2: Darcy Flow
 
@@ -944,7 +948,7 @@ Run result summary:
 
 Limitations:
 
-- Darcy remains on the finite-difference Darcy reference because OpenFOAM solves incompressible velocity-pressure flow, not Darcy porous-media flow.
+- At Phase 22 close, Darcy remained on the finite-difference Darcy reference; Phase 24 later replaced the active Darcy experiment reference with OpenFOAM-sampled fields.
 - Stokes, Oseen, and Navier-Stokes share one OpenFOAM laminar-flow sample as external pressure/velocity ground truth for this phase.
 - Reference residual diagnostics are finite-difference diagnostics computed from sampled OpenFOAM fields; they are not native OpenFOAM solver residual histories.
 - Generated artifacts under `data/` remain ignored and should not be committed unless explicitly requested.
@@ -970,7 +974,7 @@ What changed:
 - Updated Stokes, Oseen, Navier-Stokes, consolidated experiment, and procurement tests to use OpenFOAM-style sample fields.
 - Added shared test fixtures for deterministic OpenFOAM-style sample fields without adding generated artifacts under `data/`.
 
-Reference generators after Phase 23:
+Reference generators at Phase 23 close:
 
 - Darcy PINN experiment: `fd_darcy_reference`
 - Stokes PINN experiment: `openfoam_simplefoam_shared_domain`
@@ -992,7 +996,7 @@ PYTHONPATH=src python -m pinn_fluid.figures data/openfoam_vector_predictions_202
 
 Limitations:
 
-- Darcy remains a finite-difference pressure Laplace reference.
+- At Phase 23 close, Darcy remained a finite-difference pressure Laplace reference; Phase 24 later replaced the active Darcy experiment reference with OpenFOAM-sampled fields.
 - Stokes, Oseen, and Navier-Stokes share one OpenFOAM incompressible laminar-flow sample as the pressure/velocity reference for this benchmark geometry.
 - Reference residual diagnostics are still finite-difference post-processing of sampled fields, not native OpenFOAM residual histories.
 - The analytic Poiseuille helper remains as a residual benchmark, not as active vector ground truth.
@@ -1004,3 +1008,185 @@ Verification:
 - Targeted tests: `python -m pytest tests/test_phase9_vertical_slice_experiments.py tests/test_phase10_consolidated_experiments.py tests/test_phase15_reference_contracts.py tests/test_phase17_stokes_reference.py tests/test_phase18_oseen_reference.py tests/test_phase19_navier_stokes_reference.py tests/test_phase20_comparison_run_contracts.py tests/test_phase22_openfoam_experiment_references.py -q`.
 - Full suite: `python -m pytest`.
 - Whitespace check: `git diff --check`.
+
+## Phase 24: Align Darcy Boundary Conditions And OpenFOAM Ground Truth
+
+Status: complete.
+
+What changed:
+
+- Changed active Darcy boundary residuals from pressure inlet/outlet to a velocity-inlet, pressure-outlet setup consistent with the Navier-Stokes experiment family.
+- Darcy training now enforces inlet Darcy velocity `(0, -peak_velocity)`, outlet pressure `p=0`, and no-normal-flow walls.
+- Changed `run_darcy_experiment(...)` to use the prepared OpenFOAM pressure/velocity sample as its active ground truth instead of the in-repo finite-difference Laplace reference.
+- Added Darcy OpenFOAM reference fields to the normal `fields.npz` schema: reference pressure, velocity, `u`, `v`, speed, continuity, residual, and metadata.
+- Kept the older `_fd_darcy_reference(...)` helpers as historical/contract-audit utilities; they are no longer the active Darcy experiment reference.
+
+Reference generators after Phase 24:
+
+- Darcy PINN experiment: `openfoam_simplefoam_shared_domain`
+- Stokes PINN experiment: `openfoam_simplefoam_shared_domain`
+- Oseen PINN experiment: `openfoam_simplefoam_shared_domain`
+- Navier-Stokes PINN experiment: `openfoam_simplefoam_shared_domain`
+
+Artifacts produced:
+
+- Per-model `fields.npz`, `history.json`, `metrics.json`, loss plots, field plots, summary reports, and figure bundles remain the active artifact schema.
+- Darcy `fields.npz` now records OpenFOAM-backed reference pressure and velocity components instead of finite-difference Darcy pressure/velocity components.
+- Generated OpenFOAM/PINN outputs remain ignored under `data/` unless explicitly approved for commit.
+
+Commands:
+
+```bash
+PYTHONPATH=src python -m pinn_fluid.result_procurement --output-dir data/openfoam_vector_predictions_2026_05_09 --grid-points 41 --training-steps 800 --hidden-width 24 --hidden-layers 2 --learning-rate 0.01 --seed 0 --viscosity 0.25 --peak-velocity 1.0 --darcy-reference-iterations 1200 --vector-reference-source openfoam --openfoam-end-time 50 --git-commit openfoam-vector-predictions-2026-05-09
+PYTHONPATH=src python -m pinn_fluid.figures data/openfoam_vector_predictions_2026_05_09
+```
+
+Limitations:
+
+- This aligns Darcy's active experiment boundary targets with the velocity-inlet/pressure-outlet benchmark used by Navier-Stokes, but Darcy still represents velocity as `-grad(p)`.
+- The OpenFOAM sample is an incompressible laminar velocity-pressure solve, not a porous-media Darcy solver.
+- Reference residual diagnostics are finite-difference post-processing of sampled OpenFOAM fields, not native OpenFOAM solver residual histories.
+- The legacy finite-difference Darcy helpers remain in source for older audit tests and should not be treated as the active ground truth path.
+
+Verification:
+
+- Red tests: `PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-darcy-openfoam python -m pytest tests/test_phase9_vertical_slice_experiments.py tests/test_phase15_reference_contracts.py tests/test_phase16_darcy_ground_truth.py tests/test_phase20_comparison_run_contracts.py tests/test_phase22_openfoam_experiment_references.py -q` failed while Darcy still reported `fd_darcy_reference`.
+- Targeted tests: `PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-darcy-openfoam python -m pytest tests/test_phase2_darcy_domain.py tests/test_phase4_darcy_training.py tests/test_phase9_vertical_slice_experiments.py tests/test_phase15_reference_contracts.py tests/test_phase16_darcy_ground_truth.py tests/test_phase20_comparison_run_contracts.py tests/test_phase22_openfoam_experiment_references.py -q`.
+- Full suite: `PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-darcy-openfoam python -m pytest -q`.
+- Real OpenFOAM smoke: wrote `data/openfoam_darcy_aligned_smoke_2026_05_11/openfoam_case`, ran `blockMesh`, `foamRun -solver incompressibleFluid`, and `postProcess -func sampleDict -latestTime`; OpenFOAM converged at time `41`, producing `postProcessing/sampleDict/41/sharedDomainGrid.xy` with shape `(81, 7)` and nonconstant pressure range `10.5543`.
+- Smoke procurement with explicit sample path: `PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-darcy-openfoam python -m pinn_fluid.result_procurement --output-dir data/openfoam_darcy_aligned_smoke_2026_05_11 --grid-points 9 --training-steps 4 --hidden-width 6 --hidden-layers 1 --learning-rate 0.03 --seed 24 --viscosity 0.25 --peak-velocity 1.0 --darcy-reference-iterations 20 --vector-reference-source openfoam --openfoam-reference-sample-path data/openfoam_darcy_aligned_smoke_2026_05_11/openfoam_case/postProcessing/sampleDict/41/sharedDomainGrid.xy --openfoam-end-time 50 --git-commit darcy-openfoam-aligned-smoke-2026-05-11`.
+- Smoke result: `reference_generators.darcy="openfoam_simplefoam_shared_domain"`, `all_metrics_finite=true`, and `all_histories_decreased=true`.
+
+## Phase 25: Reject Shared OpenFOAM Ground Truth Across PDE Models
+
+Status: complete.
+
+What changed:
+
+- Confirmed the previous comparison run reused one OpenFOAM pressure/velocity sample for Darcy, Stokes, Oseen, and Navier-Stokes. That is not an apples-to-apples PINN surrogate comparison across PDE models.
+- Added a procurement contract that rejects a single `openfoam_reference_sample_path` for all flow models.
+- Added `ExperimentConfig.openfoam_reference_sample_paths` so Darcy, Stokes, Oseen, and Navier-Stokes can each carry a distinct OpenFOAM sample path, imported field bundle, and metadata payload.
+- Updated experiment reference names to model-specific generators: `openfoam_darcy_shared_domain`, `openfoam_stokes_shared_domain`, `openfoam_oseen_shared_domain`, and `openfoam_navier_stokes_shared_domain`.
+- The CLI now accepts `--darcy-openfoam-reference-sample-path`, `--stokes-openfoam-reference-sample-path`, `--oseen-openfoam-reference-sample-path`, and `--navier-stokes-openfoam-reference-sample-path`.
+
+Reference generators after this change:
+
+- Darcy PINN experiment: `openfoam_darcy_shared_domain`
+- Stokes PINN experiment: `openfoam_stokes_shared_domain`
+- Oseen PINN experiment: `openfoam_oseen_shared_domain`
+- Navier-Stokes PINN experiment: `openfoam_navier_stokes_shared_domain`
+
+Artifacts produced:
+
+- The artifact schema remains unchanged: per-model `fields.npz`, `history.json`, `metrics.json`, loss plots, field plots, summary reports, and figure bundles.
+- Each model's `reference_metadata_json` now records its own sample path and model-specific reference generator.
+- Generated OpenFOAM/PINN outputs remain ignored under `data/` unless explicitly approved for commit.
+
+Limitations:
+
+- This phase fixes the repository contract that allowed one OpenFOAM sample to be reused across PDE models.
+- A scientifically complete apples-to-apples run still requires true model-specific OpenFOAM cases or solvers for Darcy, Stokes, Oseen, and Navier-Stokes before new comparison figures should be treated as valid ground truth.
+- Stock OpenFOAM has Navier-Stokes-oriented incompressible solvers and `porousSimpleFoam`; a true Oseen-specific solve may require a custom OpenFOAM solver or another dedicated scientific-computing stack.
+
+Verification so far:
+
+- Red test: `PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-model-specific-openfoam python -m pytest tests/test_phase22_openfoam_experiment_references.py -q` failed because procurement accepted one shared sample and `ExperimentConfig.openfoam_reference_sample_paths` did not exist.
+- Targeted tests: `PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-model-specific-openfoam python -m pytest tests/test_phase9_vertical_slice_experiments.py tests/test_phase10_consolidated_experiments.py tests/test_phase15_reference_contracts.py tests/test_phase16_darcy_ground_truth.py tests/test_phase17_stokes_reference.py tests/test_phase18_oseen_reference.py tests/test_phase19_navier_stokes_reference.py tests/test_phase20_comparison_run_contracts.py tests/test_phase22_openfoam_experiment_references.py -q`.
+
+## Phase 26: Switch Active Dedicated Reference Path To FEniCSx
+
+Status: in progress.
+
+What changed:
+
+- Switched `ExperimentConfig.vector_reference_source` from `openfoam` to `fenicsx`.
+- Added `pinn_fluid.fenicsx_solvers` with FEniCSx metadata, field-artifact import, and a clear dependency boundary for missing `dolfinx`, `ufl`, `petsc4py`, and `mpi4py`.
+- Added `ExperimentConfig.fenicsx_reference_sample_paths` for per-model FEniCSx field artifacts.
+- Changed result procurement so active reference preparation accepts only `vector_reference_source="fenicsx"`.
+- Added per-model FEniCSx CLI artifact paths: `--darcy-fenicsx-reference-sample-path`, `--stokes-fenicsx-reference-sample-path`, `--oseen-fenicsx-reference-sample-path`, and `--navier-stokes-fenicsx-reference-sample-path`.
+- Left the OpenFOAM case-generation/import module in place as historical helper coverage, but it is no longer the active procurement reference source.
+
+Reference generators after this change:
+
+- Darcy PINN experiment: `fenicsx_darcy_shared_domain`
+- Stokes PINN experiment: `fenicsx_stokes_shared_domain`
+- Oseen PINN experiment: `fenicsx_oseen_shared_domain`
+- Navier-Stokes PINN experiment: `fenicsx_navier_stokes_shared_domain`
+
+Artifacts produced:
+
+- Per-model `fields.npz`, `history.json`, `metrics.json`, loss plots, field plots, summary reports, and figure bundles remain the active artifact schema.
+- FEniCSx field artifacts are imported from `.npz` files containing `coordinates`, `reference_pressure`, `reference_u`, and `reference_v`.
+- Generated solver/PINN outputs remain ignored under `data/` unless explicitly approved for commit.
+
+Limitations at Phase 26 close:
+
+- Phase 26 only switched the active reference contract to FEniCSx artifact imports. Phase 27 subsequently implemented automatic per-model FEniCSx solve generation.
+- The normal user Python used by tests could not import `dolfinx`, `ufl`, `petsc4py`, or `mpi4py`; the working FEniCSx stack is available through `/usr/bin/python3`.
+- Residual diagnostics remained finite-difference post-processing on sampled fields.
+
+Verification so far:
+
+- Red test: `PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-fenicsx python -m pytest tests/test_phase26_fenicsx_reference.py -q` failed while the default source was still `openfoam` and `fenicsx_reference_sample_paths` did not exist.
+- Targeted tests: `PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-fenicsx python -m pytest tests/test_phase9_vertical_slice_experiments.py tests/test_phase10_consolidated_experiments.py tests/test_phase15_reference_contracts.py tests/test_phase16_darcy_ground_truth.py tests/test_phase17_stokes_reference.py tests/test_phase18_oseen_reference.py tests/test_phase19_navier_stokes_reference.py tests/test_phase20_comparison_run_contracts.py tests/test_phase22_openfoam_experiment_references.py tests/test_phase26_fenicsx_reference.py -q`.
+
+## Phase 27: FEniCSx Model-Specific Solver Generation
+
+Status: complete.
+
+What changed:
+
+- Added model-specific FEniCSx solver generation in `pinn_fluid.fenicsx_solvers`.
+- Added `generate_fenicsx_reference(...)`, which invokes `/usr/bin/python3 -m pinn_fluid.fenicsx_solvers solve ...` so the normal conda experiment process can use the system FEniCSx installation.
+- Implemented deterministic per-model finite-element solves on the shared unit-square geometry:
+  - Darcy: CG1 pressure solve with velocity recovered from `-grad(p)`.
+  - Stokes: Taylor-Hood P2-P1 linear incompressible mixed solve.
+  - Oseen: Taylor-Hood P2-P1 linearized mixed solve with convection velocity `(peak_velocity, 0.0)`.
+  - Navier-Stokes: steady nonlinear Taylor-Hood P2-P1 mixed solve.
+- Changed procurement so missing `fenicsx_reference_sample_paths` triggers per-model FEniCSx artifact generation instead of stopping at the previous not-implemented boundary.
+- Added model-specific FEniCSx metadata for PDE model, formulation, solver stack, sample path, coordinate convention, and reference generator.
+- Added Phase 27 tests for generated artifact paths, nonconstant reference pressures, model-specific metadata, and procurement integration without manufactured/OpenFOAM/shared fallback calls.
+
+Reference generators after Phase 27:
+
+- Darcy PINN experiment: `fenicsx_darcy_shared_domain`
+- Stokes PINN experiment: `fenicsx_stokes_shared_domain`
+- Oseen PINN experiment: `fenicsx_oseen_shared_domain`
+- Navier-Stokes PINN experiment: `fenicsx_navier_stokes_shared_domain`
+
+Artifacts produced:
+
+- Generated FEniCSx artifacts are written under ignored `data/<run>/fenicsx_references/{darcy,stokes,oseen,navier_stokes}/fields.npz`.
+- Each generated FEniCSx artifact contains `coordinates`, `reference_pressure`, `reference_u`, and `reference_v`.
+- Procurement imports those artifacts and writes the established per-model `fields.npz`, `history.json`, `metrics.json`, raw loss/field plots, `run_manifest.json`, and summary reports.
+- Figure generation writes `figures/figure_manifest.json`, field panels, convergence panels, scalar field images, and pressure-velocity quiver diagnostics.
+- Generated `.npz`, `.json`, and `.png` outputs under `data/` remain ignored and were not committed.
+
+Limitations:
+
+- FEniCSx is available through `/usr/bin/python3`; the normal conda Python used by the test suite still does not import `dolfinx`, `ufl`, `petsc4py`, or `mpi4py`.
+- The container sandbox blocks MPI socket initialization, so real FEniCSx smoke commands required unsandboxed execution.
+- Reference residual diagnostics are still finite-difference post-processing on sampled fields, not native FEniCSx variational residual exports.
+- The smoke run used a 5 by 5 sampling grid and 4 training steps only; it verifies the generation and artifact path, not final surrogate accuracy.
+- The Oseen reference preserves the repository's existing convection velocity convention `(peak_velocity, 0.0)`.
+
+Reproduction commands:
+
+```bash
+PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-fenicsx python -m pinn_fluid.result_procurement --output-dir data/fenicsx_phase27_smoke_2026_05_11 --grid-points 5 --training-steps 4 --hidden-width 6 --hidden-layers 1 --learning-rate 0.03 --seed 27 --viscosity 0.25 --peak-velocity 1.0 --git-commit fenicsx-phase27-smoke
+PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-fenicsx python -m pinn_fluid.figures data/fenicsx_phase27_smoke_2026_05_11
+```
+
+Verification:
+
+- Red test: `PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-fenicsx python -m pytest tests/test_phase27_fenicsx_solver_generation.py -q` failed because `FLOW_MODEL_METADATA` and `generate_fenicsx_reference(...)` did not exist.
+- Targeted green tests: `PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-fenicsx python -m pytest tests/test_phase27_fenicsx_solver_generation.py -q` passed with `2 passed`.
+- Real FEniCSx generator smoke:
+  - `PYTHONPATH=src /usr/bin/python3 -m pinn_fluid.fenicsx_solvers solve --model darcy --output-path /tmp/pinn_fenicsx_smoke/darcy/fields.npz --grid-points 5 --mesh-cells 4 --viscosity 0.25 --peak-velocity 1.0`
+  - `PYTHONPATH=src /usr/bin/python3 -m pinn_fluid.fenicsx_solvers solve --model stokes --output-path /tmp/pinn_fenicsx_smoke/stokes/fields.npz --grid-points 5 --mesh-cells 4 --viscosity 0.25 --peak-velocity 1.0`
+  - `PYTHONPATH=src /usr/bin/python3 -m pinn_fluid.fenicsx_solvers solve --model oseen --output-path /tmp/pinn_fenicsx_smoke/oseen/fields.npz --grid-points 5 --mesh-cells 4 --viscosity 0.25 --peak-velocity 1.0`
+  - `PYTHONPATH=src /usr/bin/python3 -m pinn_fluid.fenicsx_solvers solve --model navier_stokes --output-path /tmp/pinn_fenicsx_smoke/navier_stokes/fields.npz --grid-points 5 --mesh-cells 4 --viscosity 0.25 --peak-velocity 1.0`
+- Real smoke result: all four generated artifacts had shape `(25, 2)` for coordinates and nonconstant pressure ranges.
+- End-to-end smoke: `PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-fenicsx python -m pinn_fluid.result_procurement --output-dir data/fenicsx_phase27_smoke_2026_05_11 --grid-points 5 --training-steps 4 --hidden-width 6 --hidden-layers 1 --learning-rate 0.03 --seed 27 --viscosity 0.25 --peak-velocity 1.0 --git-commit fenicsx-phase27-smoke` completed with `all_metrics_finite=true`, `all_histories_decreased=true`, and distinct FEniCSx sample paths for all models.
+- Figure smoke: `PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-fenicsx python -m pinn_fluid.figures data/fenicsx_phase27_smoke_2026_05_11` completed and wrote `figures/figure_manifest.json`; it emitted the existing Matplotlib `tight_layout` warning.
+- Targeted regression set: `PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-fenicsx python -m pytest tests/test_phase26_fenicsx_reference.py tests/test_phase27_fenicsx_solver_generation.py tests/test_phase9_vertical_slice_experiments.py tests/test_phase10_consolidated_experiments.py tests/test_phase15_reference_contracts.py tests/test_phase16_darcy_ground_truth.py tests/test_phase17_stokes_reference.py tests/test_phase18_oseen_reference.py tests/test_phase19_navier_stokes_reference.py tests/test_phase20_comparison_run_contracts.py tests/test_phase22_openfoam_experiment_references.py -q` passed with `26 passed, 7 warnings`.

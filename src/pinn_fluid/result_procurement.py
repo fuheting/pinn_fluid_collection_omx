@@ -12,14 +12,29 @@ from typing import Any, Sequence
 
 from pinn_fluid.experiments import ExperimentConfig, ExperimentResult, run_all_experiments
 
+FLOW_MODELS = ("darcy", "stokes", "oseen", "navier_stokes")
+
 
 def _config_payload(config: ExperimentConfig) -> dict[str, Any]:
     payload: dict[str, Any] = {}
     for field in fields(config):
-        if field.name == "vector_reference_fields":
+        if field.name in {
+            "vector_reference_fields",
+            "vector_reference_metadata",
+            "model_reference_fields",
+            "model_reference_metadata",
+        }:
             continue
         value = getattr(config, field.name)
-        payload[field.name] = str(value) if isinstance(value, Path) else value
+        if isinstance(value, Path):
+            payload[field.name] = str(value)
+        elif isinstance(value, dict):
+            payload[field.name] = {
+                str(key): str(item) if isinstance(item, Path) else item
+                for key, item in value.items()
+            }
+        else:
+            payload[field.name] = value
     return payload
 
 
@@ -134,10 +149,13 @@ def _run_openfoam_command(command: list[str]) -> None:
         raise RuntimeError(f"OpenFOAM command failed ({' '.join(command)}): {detail}") from exc
 
 
-def _solve_openfoam_reference(active: ExperimentConfig) -> Path:
+def _solve_openfoam_reference(active: ExperimentConfig, *, model_name: str) -> Path:
     from pinn_fluid.dedicated_solvers import OpenFOAMCaseConfig, write_openfoam_shared_domain_case
 
-    case_dir = Path(active.openfoam_case_dir or Path(active.output_dir) / "openfoam_case")
+    if active.openfoam_case_dir is None:
+        case_dir = Path(active.output_dir) / "openfoam_cases" / model_name
+    else:
+        case_dir = Path(active.openfoam_case_dir) / model_name
     write_openfoam_shared_domain_case(
         case_dir,
         OpenFOAMCaseConfig(
@@ -165,29 +183,102 @@ def _solve_openfoam_reference(active: ExperimentConfig) -> Path:
     return sample_path
 
 
-def _prepare_vector_reference_config(active: ExperimentConfig) -> ExperimentConfig:
-    if active.vector_reference_source != "openfoam":
-        raise ValueError("vector_reference_source must be 'openfoam'")
+def _solve_fenicsx_reference(active: ExperimentConfig, *, model_name: str) -> Path:
+    from pinn_fluid.fenicsx_solvers import generate_fenicsx_reference
 
-    from pinn_fluid.dedicated_solvers import OPENFOAM_REFERENCE_METADATA, import_openfoam_sampled_fields
-
-    sample_path = (
-        Path(active.openfoam_reference_sample_path)
-        if active.openfoam_reference_sample_path is not None
-        else _solve_openfoam_reference(active)
-    )
-    imported = import_openfoam_sampled_fields(
-        sample_path,
+    return generate_fenicsx_reference(
+        model_name=model_name,
+        output_dir=Path(active.output_dir) / "fenicsx_references",
         grid_points=active.grid_points,
-        metadata=OPENFOAM_REFERENCE_METADATA,
+        mesh_cells=max(4, active.grid_points - 1),
+        viscosity=active.viscosity,
+        peak_velocity=active.peak_velocity,
     )
-    metadata = dict(OPENFOAM_REFERENCE_METADATA)
-    metadata["sample_path"] = str(sample_path)
+
+
+def _required_openfoam_sample_paths(active: ExperimentConfig) -> dict[str, Path]:
+    if active.openfoam_reference_sample_path is not None:
+        raise ValueError(
+            "OpenFOAM ground truth must use per-model OpenFOAM sample paths; "
+            "set openfoam_reference_sample_paths instead of openfoam_reference_sample_path"
+        )
+    if active.openfoam_reference_sample_paths is None:
+        return {
+            model_name: _solve_openfoam_reference(active, model_name=model_name)
+            for model_name in FLOW_MODELS
+        }
+
+    paths = {
+        model_name: Path(path)
+        for model_name, path in active.openfoam_reference_sample_paths.items()
+    }
+    missing = sorted(set(FLOW_MODELS) - set(paths))
+    extra = sorted(set(paths) - set(FLOW_MODELS))
+    if missing or extra:
+        details = []
+        if missing:
+            details.append(f"missing={missing}")
+        if extra:
+            details.append(f"extra={extra}")
+        raise ValueError("OpenFOAM sample paths must cover exactly the flow models: " + ", ".join(details))
+    return paths
+
+
+def _required_fenicsx_sample_paths(active: ExperimentConfig) -> dict[str, Path]:
+    if active.openfoam_reference_sample_path is not None or active.openfoam_reference_sample_paths is not None:
+        raise ValueError("FEniCSx references do not accept OpenFOAM sample paths")
+    if active.fenicsx_reference_sample_paths is None:
+        return {
+            model_name: _solve_fenicsx_reference(active, model_name=model_name)
+            for model_name in FLOW_MODELS
+        }
+
+    paths = {
+        model_name: Path(path)
+        for model_name, path in active.fenicsx_reference_sample_paths.items()
+    }
+    missing = sorted(set(FLOW_MODELS) - set(paths))
+    extra = sorted(set(paths) - set(FLOW_MODELS))
+    if missing or extra:
+        details = []
+        if missing:
+            details.append(f"missing={missing}")
+        if extra:
+            details.append(f"extra={extra}")
+        raise ValueError("FEniCSx sample paths must cover exactly the flow models: " + ", ".join(details))
+    return paths
+
+
+def _prepare_vector_reference_config(active: ExperimentConfig) -> ExperimentConfig:
+    if active.vector_reference_source != "fenicsx":
+        raise ValueError("vector_reference_source must be 'fenicsx'")
+
+    from pinn_fluid.fenicsx_solvers import (
+        FENICSX_REFERENCE_METADATA,
+        FLOW_MODEL_METADATA,
+        import_fenicsx_sampled_fields,
+    )
+
+    sample_paths = _required_fenicsx_sample_paths(active)
+    model_fields: dict[str, dict[str, Any]] = {}
+    model_metadata: dict[str, dict[str, object]] = {}
+    for model_name, sample_path in sample_paths.items():
+        metadata = dict(FENICSX_REFERENCE_METADATA)
+        metadata.update(FLOW_MODEL_METADATA[model_name])
+        metadata["sample_path"] = str(sample_path)
+        metadata["fenicsx_reference_model"] = model_name
+        imported = import_fenicsx_sampled_fields(
+            sample_path,
+            grid_points=active.grid_points,
+            metadata=metadata,
+        )
+        model_fields[model_name] = imported
+        model_metadata[model_name] = metadata
     return replace(
         active,
-        openfoam_reference_sample_path=sample_path,
-        vector_reference_fields=imported,
-        vector_reference_metadata=metadata,
+        fenicsx_reference_sample_paths=sample_paths,
+        model_reference_fields=model_fields,
+        model_reference_metadata=model_metadata,
     )
 
 
@@ -215,12 +306,20 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--work-tree", default=None)
     parser.add_argument(
         "--vector-reference-source",
-        choices=("openfoam",),
+        choices=("fenicsx",),
         default=defaults.vector_reference_source,
     )
     parser.add_argument("--openfoam-reference-sample-path", default=None)
+    parser.add_argument("--darcy-openfoam-reference-sample-path", default=None)
+    parser.add_argument("--stokes-openfoam-reference-sample-path", default=None)
+    parser.add_argument("--oseen-openfoam-reference-sample-path", default=None)
+    parser.add_argument("--navier-stokes-openfoam-reference-sample-path", default=None)
     parser.add_argument("--openfoam-case-dir", default=None)
     parser.add_argument("--openfoam-end-time", type=int, default=defaults.openfoam_end_time)
+    parser.add_argument("--darcy-fenicsx-reference-sample-path", default=None)
+    parser.add_argument("--stokes-fenicsx-reference-sample-path", default=None)
+    parser.add_argument("--oseen-fenicsx-reference-sample-path", default=None)
+    parser.add_argument("--navier-stokes-fenicsx-reference-sample-path", default=None)
     return parser
 
 
@@ -241,8 +340,40 @@ def main(argv: Sequence[str] | None = None) -> int:
         darcy_reference_iterations=args.darcy_reference_iterations,
         vector_reference_source=args.vector_reference_source,
         openfoam_reference_sample_path=args.openfoam_reference_sample_path,
+        openfoam_reference_sample_paths={
+            "darcy": args.darcy_openfoam_reference_sample_path,
+            "stokes": args.stokes_openfoam_reference_sample_path,
+            "oseen": args.oseen_openfoam_reference_sample_path,
+            "navier_stokes": args.navier_stokes_openfoam_reference_sample_path,
+        }
+        if all(
+            path is not None
+            for path in (
+                args.darcy_openfoam_reference_sample_path,
+                args.stokes_openfoam_reference_sample_path,
+                args.oseen_openfoam_reference_sample_path,
+                args.navier_stokes_openfoam_reference_sample_path,
+            )
+        )
+        else None,
         openfoam_case_dir=args.openfoam_case_dir,
         openfoam_end_time=args.openfoam_end_time,
+        fenicsx_reference_sample_paths={
+            "darcy": args.darcy_fenicsx_reference_sample_path,
+            "stokes": args.stokes_fenicsx_reference_sample_path,
+            "oseen": args.oseen_fenicsx_reference_sample_path,
+            "navier_stokes": args.navier_stokes_fenicsx_reference_sample_path,
+        }
+        if all(
+            path is not None
+            for path in (
+                args.darcy_fenicsx_reference_sample_path,
+                args.stokes_fenicsx_reference_sample_path,
+                args.oseen_fenicsx_reference_sample_path,
+                args.navier_stokes_fenicsx_reference_sample_path,
+            )
+        )
+        else None,
     )
     manifest = run_result_procurement(
         config,

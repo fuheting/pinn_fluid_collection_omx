@@ -3,8 +3,36 @@
 import json
 import math
 
+import numpy as np
+
 from pinn_fluid.experiments import ExperimentConfig
 from pinn_fluid.result_procurement import run_result_procurement
+
+
+def _fenicsx_sample_paths(tmp_path, grid_points: int):
+    paths = {}
+    values = np.linspace(0.0, 1.0, grid_points)
+    for offset, model in enumerate(("darcy", "stokes", "oseen", "navier_stokes")):
+        coordinates = []
+        pressure = []
+        u_values = []
+        v_values = []
+        for x in values:
+            for y in values:
+                coordinates.append((x, y))
+                pressure.append((float(offset) + 1.0 - y + 0.1 * x,))
+                u_values.append((0.01 * offset + 0.2 * x * (1.0 - x),))
+                v_values.append((-0.02 * offset - y * (1.0 - 0.25 * x),))
+        path = tmp_path / f"{model}_fenicsx_fields.npz"
+        np.savez(
+            path,
+            coordinates=np.asarray(coordinates, dtype=np.float64),
+            reference_pressure=np.asarray(pressure, dtype=np.float64),
+            reference_u=np.asarray(u_values, dtype=np.float64),
+            reference_v=np.asarray(v_values, dtype=np.float64),
+        )
+        paths[model] = path
+    return paths
 
 
 def test_result_procurement_writes_manifest_for_configured_output_dir(tmp_path):
@@ -18,6 +46,7 @@ def test_result_procurement_writes_manifest_for_configured_output_dir(tmp_path):
         seed=0,
         viscosity=0.25,
         darcy_reference_iterations=20,
+        fenicsx_reference_sample_paths=_fenicsx_sample_paths(tmp_path, 5),
     )
 
     manifest = run_result_procurement(config, git_commit="test-commit")
@@ -58,6 +87,7 @@ def test_result_procurement_manifest_points_to_existing_artifacts(tmp_path):
         seed=1,
         viscosity=0.25,
         darcy_reference_iterations=20,
+        fenicsx_reference_sample_paths=_fenicsx_sample_paths(tmp_path, 5),
     )
 
     manifest = run_result_procurement(config, git_commit="test-commit")

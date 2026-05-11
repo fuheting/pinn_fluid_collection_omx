@@ -99,18 +99,18 @@ def test_experiment_results_and_artifacts_record_reference_metadata(tmp_path, op
     ]
 
     metadata_by_model = {result.model: result.reference_metadata for result in results}
-    assert metadata_by_model["darcy"] == {
-        "reference_generator_name": "fd_darcy_reference",
-        "pde_model_represented": "Darcy pressure Laplace equation",
-        "boundary_condition_type": "pressure Dirichlet inlet/outlet with no-normal-flow walls",
-        "coordinate_convention": EXPECTED_COORDINATE_CONVENTION,
-        "reference_kind": "finite-difference",
-    }
+    assert metadata_by_model["darcy"]["reference_generator_name"] == "fenicsx_darcy_shared_domain"
+    assert metadata_by_model["darcy"]["reference_kind"] == "dedicated-solver"
+    assert metadata_by_model["darcy"]["boundary_condition_type"] == (
+        "velocity inlet with pressure outlet and no-slip walls"
+    )
+    assert metadata_by_model["darcy"]["coordinate_convention"] == EXPECTED_COORDINATE_CONVENTION
+    assert metadata_by_model["darcy"]["compared_model"] == "darcy"
     assert metadata_by_model["navier_stokes"]["reference_generator_name"] == (
-        "openfoam_simplefoam_shared_domain"
+        "fenicsx_navier_stokes_shared_domain"
     )
     assert metadata_by_model["navier_stokes"]["pde_model_represented"] == (
-        "OpenFOAM incompressible steady laminar flow"
+        "FEniCSx finite-element flow solve"
     )
     assert metadata_by_model["navier_stokes"]["coordinate_convention"] == (
         EXPECTED_COORDINATE_CONVENTION
@@ -144,7 +144,11 @@ def test_legacy_shared_patch_vector_reference_remains_available_for_contract_aud
 
 
 def test_procurement_manifest_records_reference_metadata(tmp_path, openfoam_sample_writer):
-    sample_path = openfoam_sample_writer(tmp_path / "sharedDomainGrid.xy", grid_points=5)
+    sample_paths = {}
+    for model in ("darcy", "stokes", "oseen", "navier_stokes"):
+        sample_dir = tmp_path / model
+        sample_dir.mkdir()
+        sample_paths[model] = openfoam_sample_writer(sample_dir / "sharedDomainGrid.xy", grid_points=5)
     config = ExperimentConfig(
         output_dir=tmp_path / "procured",
         grid_points=5,
@@ -155,7 +159,7 @@ def test_procurement_manifest_records_reference_metadata(tmp_path, openfoam_samp
         seed=5,
         viscosity=0.25,
         darcy_reference_iterations=20,
-        openfoam_reference_sample_path=sample_path,
+        fenicsx_reference_sample_paths=sample_paths,
     )
 
     manifest = run_result_procurement(config, git_commit="phase15-test")
@@ -163,7 +167,5 @@ def test_procurement_manifest_records_reference_metadata(tmp_path, openfoam_samp
     for entry in manifest["results"]:
         assert "reference_metadata" in entry
         assert entry["reference_metadata"]["coordinate_convention"] == EXPECTED_COORDINATE_CONVENTION
-        if entry["model"] == "darcy":
-            assert entry["reference_metadata"]["reference_kind"] == "finite-difference"
-        elif entry["model"] in {"stokes", "oseen", "navier_stokes"}:
+        if entry["model"] in {"darcy", "stokes", "oseen", "navier_stokes"}:
             assert entry["reference_metadata"]["reference_kind"] == "dedicated-solver"

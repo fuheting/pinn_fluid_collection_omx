@@ -33,6 +33,8 @@ def darcy_loss_components(
     model: torch.nn.Module,
     interior_coordinates: torch.Tensor,
     boundary_samples: dict[str, dict[str, torch.Tensor]],
+    *,
+    inlet_velocity: tuple[float, float] = (0.0, -1.0),
 ) -> dict[str, torch.Tensor]:
     """Return mean-squared Darcy residual losses for one collocation batch."""
 
@@ -40,17 +42,20 @@ def darcy_loss_components(
     pressure = model(interior)
     interior_residual = laplace_residual(pressure, interior)
 
-    inlet_coordinates = boundary_samples["inlet"]["coordinates"]
+    inlet_coordinates = _coordinates_for_autograd(boundary_samples["inlet"]["coordinates"])
     outlet_coordinates = boundary_samples["outlet"]["coordinates"]
+    inlet_pressure = model(inlet_coordinates)
+    inlet_gradients = pressure_gradient(inlet_pressure, inlet_coordinates)
     wall_coordinates = _coordinates_for_autograd(boundary_samples["walls"]["coordinates"])
     wall_pressure = model(wall_coordinates)
     wall_gradients = pressure_gradient(wall_pressure, wall_coordinates)
 
     residuals = boundary_residuals(
-        inlet_pressure=model(inlet_coordinates),
+        inlet_gradients=inlet_gradients,
         outlet_pressure=model(outlet_coordinates),
         wall_gradients=wall_gradients,
         wall_normals=boundary_samples["walls"]["normals"],
+        inlet_velocity=inlet_velocity,
     )
 
     return {
@@ -66,12 +71,18 @@ def darcy_total_loss(
     interior_coordinates: torch.Tensor,
     boundary_samples: dict[str, dict[str, torch.Tensor]],
     *,
+    inlet_velocity: tuple[float, float] = (0.0, -1.0),
     weights: dict[str, float] | None = None,
 ) -> torch.Tensor:
     """Return the weighted Darcy residual loss for one collocation batch."""
 
     active_weights = DEFAULT_DARCY_LOSS_WEIGHTS if weights is None else weights
-    components = darcy_loss_components(model, interior_coordinates, boundary_samples)
+    components = darcy_loss_components(
+        model,
+        interior_coordinates,
+        boundary_samples,
+        inlet_velocity=inlet_velocity,
+    )
     weighted_terms = [
         active_weights[name] * components[name]
         for name in ("interior", "inlet", "outlet", "wall")

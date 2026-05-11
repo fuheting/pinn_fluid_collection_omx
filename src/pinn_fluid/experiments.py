@@ -141,12 +141,24 @@ class ExperimentConfig:
     viscosity: float = 0.25
     peak_velocity: float = 1.0
     darcy_reference_iterations: int = 400
-    vector_reference_source: str = "openfoam"
+    vector_reference_source: str = "fenicsx"
     openfoam_reference_sample_path: Path | str | None = None
+    openfoam_reference_sample_paths: dict[str, Path | str] | None = None
     openfoam_case_dir: Path | str | None = None
     openfoam_end_time: int = 50
+    fenicsx_reference_sample_paths: dict[str, Path | str] | None = None
     vector_reference_fields: dict[str, Any] | None = field(default=None, compare=False, repr=False)
     vector_reference_metadata: dict[str, object] | None = field(default=None, compare=False, repr=False)
+    model_reference_fields: dict[str, dict[str, Any]] | None = field(
+        default=None,
+        compare=False,
+        repr=False,
+    )
+    model_reference_metadata: dict[str, dict[str, object]] | None = field(
+        default=None,
+        compare=False,
+        repr=False,
+    )
 
 
 def _as_output_dir(path: Path | str) -> Path:
@@ -310,6 +322,10 @@ def _reference_metadata_json(metadata: dict[str, object]) -> str:
     return json.dumps(metadata, sort_keys=True)
 
 
+def _dedicated_reference_name(model_name: str, source: str) -> str:
+    return f"{source}_{model_name}_shared_domain"
+
+
 def _shared_patch_vector_reference(
     grid_points: int,
     iterations: int,
@@ -337,12 +353,17 @@ def _openfoam_reference_fields(
     *,
     model_name: str,
 ) -> dict[str, np.ndarray]:
-    """Convert sampled OpenFOAM fields to the vector-model reference schema."""
+    """Convert sampled dedicated-solver fields to the vector-model reference schema."""
 
-    if config.vector_reference_fields is None:
-        raise ValueError("OpenFOAM vector references require vector_reference_fields")
-
-    source = config.vector_reference_fields
+    if config.model_reference_fields is not None:
+        try:
+            source = config.model_reference_fields[model_name]
+        except KeyError as exc:
+            raise ValueError(f"missing dedicated reference fields for {model_name}") from exc
+    elif config.vector_reference_fields is not None:
+        source = config.vector_reference_fields
+    else:
+        raise ValueError("dedicated references require model_reference_fields")
     grid_points = config.grid_points
     spacing = 1.0 / float(grid_points - 1)
     pressure = np.asarray(source["reference_pressure"], dtype=np.float64).reshape(-1, 1)
@@ -372,6 +393,17 @@ def _openfoam_reference_fields(
     )
     continuity = du_dx + dv_dy
 
+    if model_name == "darcy":
+        residual = np.abs(continuity)
+        return {
+            "u": u,
+            "v": v,
+            "pressure": pressure,
+            "velocity": velocity,
+            "speed": speed,
+            "continuity": continuity.reshape(-1, 1),
+            "residual": residual.reshape(-1, 1),
+        }
     if model_name == "stokes":
         x_momentum = -dp_dx + config.viscosity * lap_u
         y_momentum = -dp_dy + config.viscosity * lap_v
@@ -388,7 +420,7 @@ def _openfoam_reference_fields(
             u_grid * dv_dx + v_grid * dv_dy - dp_dy + config.viscosity * lap_v
         )
     else:
-        raise ValueError(f"unsupported OpenFOAM vector reference model: {model_name}")
+        raise ValueError(f"unsupported dedicated vector reference model: {model_name}")
 
     residual = np.sqrt(continuity**2 + x_momentum**2 + y_momentum**2)
     fields: dict[str, np.ndarray] = {
@@ -415,11 +447,18 @@ def _openfoam_reference_metadata(
     *,
     model_name: str,
 ) -> dict[str, object]:
-    if config.vector_reference_metadata is None:
-        raise ValueError("OpenFOAM vector references require vector_reference_metadata")
-    metadata = deepcopy(config.vector_reference_metadata)
+    if config.model_reference_metadata is not None:
+        try:
+            metadata = deepcopy(config.model_reference_metadata[model_name])
+        except KeyError as exc:
+            raise ValueError(f"missing dedicated reference metadata for {model_name}") from exc
+    elif config.vector_reference_metadata is not None:
+        metadata = deepcopy(config.vector_reference_metadata)
+    else:
+        raise ValueError("dedicated references require model_reference_metadata")
     metadata["compared_model"] = model_name
-    metadata["reference_generator_name"] = "openfoam_simplefoam_shared_domain"
+    source = str(config.vector_reference_source)
+    metadata["reference_generator_name"] = _dedicated_reference_name(model_name, source)
     metadata["reference_kind"] = "dedicated-solver"
     return metadata
 
@@ -441,7 +480,12 @@ def run_darcy_experiment(config: ExperimentConfig | None = None) -> ExperimentRe
         model,
         active.training_steps,
         active.learning_rate,
-        lambda: darcy_loss_components(model, interior, boundary),
+        lambda: darcy_loss_components(
+            model,
+            interior,
+            boundary,
+            inlet_velocity=(0.0, -active.peak_velocity),
+        ),
         DEFAULT_DARCY_LOSS_WEIGHTS,
     )
 
@@ -450,11 +494,8 @@ def run_darcy_experiment(config: ExperimentConfig | None = None) -> ExperimentRe
     predicted_pressure = model(autograd_coordinates)
     predicted_velocity = darcy_velocity(predicted_pressure, autograd_coordinates)
     residual = laplace_residual(predicted_pressure, autograd_coordinates)
-    reference_fields = _fd_darcy_reference_fields(
-        active.grid_points,
-        active.darcy_reference_iterations,
-    )
-    reference_metadata = deepcopy(DARCY_REFERENCE_METADATA)
+    reference_fields = _openfoam_reference_fields(active, model_name="darcy")
+    reference_metadata = _openfoam_reference_metadata(active, model_name="darcy")
 
     predicted_pressure_np = predicted_pressure.detach().numpy()
     predicted_velocity_np = predicted_velocity.detach().numpy()
@@ -485,6 +526,7 @@ def run_darcy_experiment(config: ExperimentConfig | None = None) -> ExperimentRe
         reference_u=reference_fields["u"],
         reference_v=reference_fields["v"],
         reference_speed=reference_fields["speed"],
+        reference_continuity=reference_fields["continuity"],
         reference_residual=reference_fields["residual"],
         residual=residual_np,
         reference_metadata_json=_reference_metadata_json(reference_metadata),
@@ -496,7 +538,7 @@ def run_darcy_experiment(config: ExperimentConfig | None = None) -> ExperimentRe
 
     return ExperimentResult(
         model="darcy",
-        reference="finite_difference_laplace",
+        reference=_dedicated_reference_name("darcy", active.vector_reference_source),
         grid_shape=(active.grid_points, active.grid_points),
         history=history,
         metrics=metrics,
@@ -680,10 +722,10 @@ def _openfoam_vector_reference(
     *,
     model_name: str,
 ) -> tuple[str, Callable[[], dict[str, np.ndarray]], dict[str, object]]:
-    if active.vector_reference_source != "openfoam":
-        raise ValueError("vector_reference_source must be 'openfoam'")
+    if active.vector_reference_source != "fenicsx":
+        raise ValueError("vector_reference_source must be 'fenicsx'")
     return (
-        "openfoam_simplefoam_shared_domain",
+        _dedicated_reference_name(model_name, active.vector_reference_source),
         lambda: _openfoam_reference_fields(active, model_name=model_name),
         _openfoam_reference_metadata(active, model_name=model_name),
     )

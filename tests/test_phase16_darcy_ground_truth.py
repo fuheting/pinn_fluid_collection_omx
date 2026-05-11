@@ -87,8 +87,11 @@ def test_fd_darcy_reference_fields_expose_pressure_components_speed_and_residual
     assert float(np.max(np.abs(fields["residual"]))) < 0.02
 
 
-def test_darcy_experiment_saves_explicit_actual_field_components_and_diagnostics(tmp_path):
-    config = ExperimentConfig(
+def test_darcy_experiment_saves_explicit_actual_field_components_and_diagnostics(
+    tmp_path,
+    openfoam_config_factory,
+):
+    config = openfoam_config_factory(
         output_dir=tmp_path,
         grid_points=5,
         training_steps=4,
@@ -123,4 +126,6 @@ def test_darcy_experiment_saves_explicit_actual_field_components_and_diagnostics
         )
         assert np.all(np.isfinite(fields["reference_residual"]))
         metadata = json.loads(str(fields["reference_metadata_json"]))
-        assert metadata["reference_kind"] == "finite-difference"
+        assert metadata["reference_kind"] == "dedicated-solver"
+        assert metadata["reference_generator_name"] == "fenicsx_darcy_shared_domain"
+        assert metadata["compared_model"] == "darcy"

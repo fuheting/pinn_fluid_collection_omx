@@ -27,9 +27,9 @@ def test_run_oseen_experiment_uses_openfoam_reference_and_schema(
     result = run_oseen_experiment(config)
 
     assert result.model == "oseen"
-    assert result.reference == "openfoam_simplefoam_shared_domain"
-    assert result.reference_metadata["reference_generator_name"] == "openfoam_simplefoam_shared_domain"
-    assert result.reference_metadata["pde_model_represented"] == "OpenFOAM incompressible steady laminar flow"
+    assert result.reference == "fenicsx_oseen_shared_domain"
+    assert result.reference_metadata["reference_generator_name"] == "fenicsx_oseen_shared_domain"
+    assert result.reference_metadata["pde_model_represented"] == "FEniCSx finite-element flow solve"
     assert result.reference_metadata["reference_kind"] == "dedicated-solver"
     assert result.reference_metadata["compared_model"] == "oseen"
     assert result.metrics["velocity_l2"] >= 0.0

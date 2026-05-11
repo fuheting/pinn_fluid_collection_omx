@@ -26,9 +26,9 @@ def test_run_stokes_experiment_uses_openfoam_reference_and_schema(
     result = run_stokes_experiment(config)
 
     assert result.model == "stokes"
-    assert result.reference == "openfoam_simplefoam_shared_domain"
-    assert result.reference_metadata["reference_generator_name"] == "openfoam_simplefoam_shared_domain"
-    assert result.reference_metadata["pde_model_represented"] == "OpenFOAM incompressible steady laminar flow"
+    assert result.reference == "fenicsx_stokes_shared_domain"
+    assert result.reference_metadata["reference_generator_name"] == "fenicsx_stokes_shared_domain"
+    assert result.reference_metadata["pde_model_represented"] == "FEniCSx finite-element flow solve"
     assert result.reference_metadata["reference_kind"] == "dedicated-solver"
     assert result.reference_metadata["compared_model"] == "stokes"
     assert result.metrics["velocity_l2"] >= 0.0

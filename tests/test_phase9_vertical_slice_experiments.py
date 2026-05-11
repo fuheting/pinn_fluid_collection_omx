@@ -11,8 +11,11 @@ from pinn_fluid.experiments import (
 )
 
 
-def test_darcy_experiment_saves_fields_history_residuals_and_metrics(tmp_path):
-    config = ExperimentConfig(
+def test_darcy_experiment_saves_fields_history_residuals_and_metrics(
+    tmp_path,
+    openfoam_config_factory,
+):
+    config = openfoam_config_factory(
         output_dir=tmp_path,
         grid_points=5,
         training_steps=4,
@@ -25,7 +28,7 @@ def test_darcy_experiment_saves_fields_history_residuals_and_metrics(tmp_path):
     result = run_darcy_experiment(config)
 
     assert result.model == "darcy"
-    assert result.reference == "finite_difference_laplace"
+    assert result.reference == "fenicsx_darcy_shared_domain"
     assert result.history.reduced
     assert set(result.history.components) == {"interior", "inlet", "outlet", "wall"}
     assert result.metrics["pressure_l2"] >= 0.0
@@ -33,9 +36,17 @@ def test_darcy_experiment_saves_fields_history_residuals_and_metrics(tmp_path):
     assert result.metrics["residual_rms"] >= 0.0
 
     field_data = np.load(tmp_path / result.artifacts["fields_npz"])
-    assert {"coordinates", "predicted_pressure", "reference_pressure", "residual"}.issubset(
-        field_data.files
-    )
+    assert {
+        "coordinates",
+        "predicted_pressure",
+        "reference_pressure",
+        "reference_velocity",
+        "reference_u",
+        "reference_v",
+        "reference_speed",
+        "reference_residual",
+        "residual",
+    }.issubset(field_data.files)
     assert field_data["coordinates"].shape == (25, 2)
 
     history_payload = json.loads((tmp_path / result.artifacts["history_json"]).read_text())
@@ -59,7 +70,7 @@ def test_navier_stokes_experiment_uses_model_specific_reference(tmp_path, openfo
     result = run_poiseuille_navier_stokes_experiment(config)
 
     assert result.model == "navier_stokes"
-    assert result.reference == "openfoam_simplefoam_shared_domain"
+    assert result.reference == "fenicsx_navier_stokes_shared_domain"
     assert result.history.reduced
     assert set(result.history.components) == {
         "continuity",

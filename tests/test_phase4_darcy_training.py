@@ -25,7 +25,7 @@ def test_darcy_loss_components_cover_interior_and_boundary_terms():
 
     assert set(components) == {"interior", "inlet", "outlet", "wall"}
     assert torch.allclose(components["interior"], torch.tensor(0.0, dtype=torch.float64))
-    assert torch.allclose(components["inlet"], torch.tensor(1.0, dtype=torch.float64))
+    assert torch.allclose(components["inlet"], torch.tensor(0.5, dtype=torch.float64))
     assert torch.allclose(components["outlet"], torch.tensor(0.0, dtype=torch.float64))
     assert torch.allclose(components["wall"], torch.tensor(0.0, dtype=torch.float64))
 
@@ -36,7 +36,7 @@ def test_darcy_total_loss_applies_default_phase_weights():
 
     total = darcy_total_loss(ZeroPressure(), interior, boundary)
 
-    assert torch.allclose(total, torch.tensor(10.0, dtype=torch.float64))
+    assert torch.allclose(total, torch.tensor(5.0, dtype=torch.float64))
 
 
 def test_train_darcy_smoke_reduces_loss_on_shared_collocation_points():

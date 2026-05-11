@@ -72,16 +72,23 @@ def darcy_velocity(pressure: torch.Tensor, coordinates: torch.Tensor) -> torch.T
 
 def boundary_residuals(
     *,
-    inlet_pressure: torch.Tensor,
+    inlet_gradients: torch.Tensor,
     outlet_pressure: torch.Tensor,
     wall_gradients: torch.Tensor,
     wall_normals: torch.Tensor,
+    inlet_velocity: tuple[float, float] = (0.0, -1.0),
 ) -> dict[str, torch.Tensor]:
-    """Return residuals for inlet, outlet, and no-normal-flow walls."""
+    """Return residuals for velocity inlet, pressure outlet, and impermeable walls."""
 
+    inlet_target = torch.tensor(
+        inlet_velocity,
+        dtype=inlet_gradients.dtype,
+        device=inlet_gradients.device,
+    ).reshape(1, 2)
+    inlet_darcy_velocity = -inlet_gradients
     wall_flux = (wall_gradients * wall_normals).sum(dim=1, keepdim=True)
     return {
-        "inlet": inlet_pressure - 1.0,
+        "inlet": inlet_darcy_velocity - inlet_target,
         "outlet": outlet_pressure,
         "wall": wall_flux,
     }

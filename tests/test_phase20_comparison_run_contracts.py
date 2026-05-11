@@ -10,18 +10,26 @@ from pinn_fluid.result_procurement import run_result_procurement
 
 
 EXPECTED_REFERENCE_GENERATORS = {
-    "darcy": "fd_darcy_reference",
-    "stokes": "openfoam_simplefoam_shared_domain",
-    "oseen": "openfoam_simplefoam_shared_domain",
-    "navier_stokes": "openfoam_simplefoam_shared_domain",
+    "darcy": "fenicsx_darcy_shared_domain",
+    "stokes": "fenicsx_stokes_shared_domain",
+    "oseen": "fenicsx_oseen_shared_domain",
+    "navier_stokes": "fenicsx_navier_stokes_shared_domain",
 }
+
+
+def _openfoam_sample_paths(tmp_path, openfoam_sample_writer):
+    sample_paths = {}
+    for model in EXPECTED_REFERENCE_GENERATORS:
+        sample_dir = tmp_path / model
+        sample_dir.mkdir()
+        sample_paths[model] = openfoam_sample_writer(sample_dir / "sharedDomainGrid.xy", grid_points=5)
+    return sample_paths
 
 
 def test_procurement_manifest_summarizes_model_specific_reference_generators(
     tmp_path,
     openfoam_sample_writer,
 ):
-    sample_path = openfoam_sample_writer(tmp_path / "sharedDomainGrid.xy", grid_points=5)
     config = ExperimentConfig(
         output_dir=tmp_path / "comparison",
         grid_points=5,
@@ -32,7 +40,7 @@ def test_procurement_manifest_summarizes_model_specific_reference_generators(
         seed=12,
         viscosity=0.25,
         darcy_reference_iterations=20,
-        openfoam_reference_sample_path=sample_path,
+        fenicsx_reference_sample_paths=_openfoam_sample_paths(tmp_path, openfoam_sample_writer),
     )
 
     manifest = run_result_procurement(config, git_commit="phase20-test")
@@ -43,15 +51,15 @@ def test_procurement_manifest_summarizes_model_specific_reference_generators(
     for entry in manifest["results"]:
         metadata = entry["reference_metadata"]
         assert metadata["reference_generator_name"] == EXPECTED_REFERENCE_GENERATORS[entry["model"]]
-        assert metadata["reference_kind"] in {"finite-difference", "dedicated-solver"}
-        assert "reference_continuity_rms" in entry["metrics"] or entry["model"] == "darcy"
+        assert metadata["reference_kind"] == "dedicated-solver"
+        if entry["model"] != "darcy":
+            assert "reference_continuity_rms" in entry["metrics"]
 
 
 def test_procured_model_specific_bundle_has_required_fields_and_figures(
     tmp_path,
     openfoam_sample_writer,
 ):
-    sample_path = openfoam_sample_writer(tmp_path / "sharedDomainGrid.xy", grid_points=5)
     config = ExperimentConfig(
         output_dir=tmp_path / "comparison",
         grid_points=5,
@@ -62,7 +70,7 @@ def test_procured_model_specific_bundle_has_required_fields_and_figures(
         seed=13,
         viscosity=0.25,
         darcy_reference_iterations=20,
-        openfoam_reference_sample_path=sample_path,
+        fenicsx_reference_sample_paths=_openfoam_sample_paths(tmp_path, openfoam_sample_writer),
     )
 
     manifest = run_result_procurement(config, git_commit="phase20-test")
@@ -83,7 +91,15 @@ def test_procured_model_specific_bundle_has_required_fields_and_figures(
             assert "reference_metadata_json" in fields.files
             metadata = json.loads(str(fields["reference_metadata_json"]))
             assert metadata["reference_generator_name"] == EXPECTED_REFERENCE_GENERATORS[entry["model"]]
-            if entry["model"] != "darcy":
+            if entry["model"] == "darcy":
+                assert {
+                    "reference_velocity",
+                    "reference_u",
+                    "reference_v",
+                    "reference_speed",
+                    "reference_residual",
+                }.issubset(fields.files)
+            else:
                 assert {
                     "reference_speed",
                     "reference_continuity",

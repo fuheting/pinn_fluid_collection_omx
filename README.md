@@ -8,7 +8,7 @@ The long-term objective is to evaluate how PINNs converge on fluid mechanics pro
 
 ## Current Status
 
-The current phase uses OpenFOAM-solved pressure and velocity fields as the only active vector-model actual/reference path. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel residual benchmark, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, summary metrics, and explicit reference metadata, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, segmented OpenFOAM case generation for the shared top-left inlet and bottom-right outlet, and OpenFOAM-backed vector references for Stokes, Oseen, and Navier-Stokes.
+The current phase generates model-specific FEniCSx actual/reference fields for Darcy, Stokes, Oseen, and Navier-Stokes experiments before running PINN comparisons. The repository defines model-agnostic inlet/outlet/wall patches, shared deterministic collocation sampling, Darcy residual helpers, Stokes residual helpers, Oseen residual helpers, Navier-Stokes residual helpers, minimal Darcy and Stokes neural fields, lightweight Darcy, Stokes, Oseen, and Navier-Stokes training smoke loops, phase-ordered smoke summaries, a closed-form laminar channel residual benchmark, a CFD-style experiment layer that saves predicted fields, reference fields, residual fields, objective histories, component-wise histories, plots, summary metrics, and explicit reference metadata, a manifest-writing procurement surface for staged local runs, standalone figure panels generated from saved `fields.npz` and `history.json` artifacts, boundary-mask diagnostics, pressure-velocity quiver diagnostics, historical OpenFOAM case generation helpers, and FEniCSx-backed solver generation for all active flow experiments.
 
 ## Planned Phases
 
@@ -41,6 +41,10 @@ The current phase uses OpenFOAM-solved pressure and velocity fields as the only 
 | 21 | Dedicated OpenFOAM reference case generation and field import | Complete |
 | 22 | OpenFOAM-backed vector-model actual fields and PINN rerun | Complete |
 | 23 | Remove manufactured streamfunction vector references from active experiment flow | Complete |
+| 24 | Align Darcy boundary conditions with Navier-Stokes and use OpenFOAM Darcy ground truth | Complete |
+| 25 | Reject shared OpenFOAM ground truth across PDE models | Complete |
+| 26 | Switch active dedicated reference path to FEniCSx | Complete |
+| 27 | FEniCSx model-specific solver generation | Complete |
 
 ## Repository Layout
 
@@ -258,21 +262,22 @@ Phases 8-10 add `pinn_fluid.experiments` for lightweight local comparisons as ph
 - `TrainingHistory` records total objective values and per-loss-component histories for every optimizer iteration.
 - `ExperimentResult` stores model name, reference source, grid shape, metrics, and artifact paths.
 - `ExperimentResult` stores reference metadata with the generator name, PDE model represented by the reference, boundary condition type, coordinate convention, and reference kind.
-- `run_darcy_experiment(...)` trains a small Darcy pressure field and compares it to an in-repo finite-difference Laplace reference on a deterministic grid. The Darcy actual field now exposes pressure, `u`, `v`, speed, and a finite-difference Laplace residual diagnostic.
-- `run_poiseuille_navier_stokes_experiment(...)` keeps the historical API name but now trains a small velocity-pressure field on the same shared unit-square patch geometry as Darcy and compares it to an OpenFOAM-sampled pressure/velocity reference.
+- `run_darcy_experiment(...)` trains a small Darcy pressure field with the same velocity-inlet, pressure-outlet geometry family as the Navier-Stokes experiment. The active Darcy actual field must come from a Darcy-labeled FEniCSx field artifact and exposes pressure, `u`, `v`, speed, continuity, and residual diagnostics.
+- `run_poiseuille_navier_stokes_experiment(...)` keeps the historical API name but now trains a small velocity-pressure field on the same shared unit-square patch geometry as Darcy and compares it to a Navier-Stokes-labeled FEniCSx pressure/velocity reference.
 - `run_stokes_experiment(...)` and `run_oseen_experiment(...)` use the same shared-patch boundary setup so the vector-flow comparisons are no longer horizontal channel-flow artifacts.
-- The vector experiments save reference `u`, `v`, pressure, speed, and residual-diagnostic fields from OpenFOAM-sampled pressure/velocity fields. The previous manufactured streamfunction builders are no longer part of the active experiment flow.
+- Result procurement uses FEniCSx as the active dedicated reference source. Each run must provide or generate a per-model FEniCSx field artifact for Darcy, Stokes, Oseen, and Navier-Stokes so the manifest can identify which ground-truth source each PINN was compared against.
+- All active experiments save reference `u`, `v`, pressure, speed, and residual-diagnostic fields from the model-specific FEniCSx-sampled pressure/velocity fields, except for legacy finite-difference Darcy helpers retained only for historical tests and contract audit. The previous manufactured streamfunction builders are no longer part of the active experiment flow.
 - Current reference metadata is:
 
 | Model | Reference generator | PDE represented | Reference kind |
 | --- | --- | --- | --- |
-| Darcy | `fd_darcy_reference` | Darcy pressure Laplace equation | finite-difference |
-| Stokes | `openfoam_simplefoam_shared_domain` | OpenFOAM incompressible steady laminar flow | dedicated-solver |
-| Oseen | `openfoam_simplefoam_shared_domain` | OpenFOAM incompressible steady laminar flow | dedicated-solver |
-| Navier-Stokes | `openfoam_simplefoam_shared_domain` | OpenFOAM incompressible steady laminar flow | dedicated-solver |
+| Darcy | `fenicsx_darcy_shared_domain` | FEniCSx Darcy shared-domain artifact | dedicated-solver |
+| Stokes | `fenicsx_stokes_shared_domain` | FEniCSx Stokes shared-domain artifact | dedicated-solver |
+| Oseen | `fenicsx_oseen_shared_domain` | FEniCSx Oseen shared-domain artifact | dedicated-solver |
+| Navier-Stokes | `fenicsx_navier_stokes_shared_domain` | FEniCSx Navier-Stokes shared-domain artifact | dedicated-solver |
 
 All four references use the Cartesian unit-square convention: `x` increases left-to-right, `y=0` is bottom, `y=1` is top, the inlet is the top-left horizontal patch, and the outlet is the bottom-right horizontal patch. Grid coordinates flatten in x-major order with y varying fastest, while plotting reshapes fields with `reshape(grid_points, grid_points).T` and `origin="lower"`.
-Stokes/Oseen/Navier-Stokes direct experiment calls require prepared OpenFOAM reference fields in `ExperimentConfig`; the procurement runner prepares those fields from either a supplied OpenFOAM sample or a generated local OpenFOAM case.
+Direct experiment calls require prepared FEniCSx reference fields in `ExperimentConfig`; the procurement runner prepares those fields from per-model supplied FEniCSx field artifacts, or generates missing artifacts with the system FEniCSx Python path. The generated active references are model-specific: Darcy solves a pressure/velocity porous-flow problem, Stokes solves a linear incompressible mixed system, Oseen solves a linearized mixed system with documented convection velocity, and Navier-Stokes solves a steady nonlinear incompressible mixed system.
 - `run_all_experiments(...)` runs Darcy, Stokes, Oseen, and Navier-Stokes in order and writes a consolidated JSON and Markdown report.
 
 Each experiment writes reproducible numeric artifacts under the configured output directory:
@@ -784,9 +789,39 @@ PYTHONPATH=src python -m pinn_fluid.result_procurement \
 PYTHONPATH=src python -m pinn_fluid.figures data/openfoam_vector_predictions_2026_05_09
 ```
 
-Darcy still uses `fd_darcy_reference`, while Stokes, Oseen, and Navier-Stokes use `openfoam_simplefoam_shared_domain`. `--vector-reference-source` now accepts only `openfoam`; if `--openfoam-reference-sample-path` is omitted, result procurement generates and runs the local OpenFOAM case. The OpenFOAM sample is imported into the existing `fields.npz` schema and finite-difference residual diagnostics are computed from the sampled pressure/velocity fields for each vector model.
+Darcy, Stokes, Oseen, and Navier-Stokes now use model-specific FEniCSx reference generator names: `fenicsx_darcy_shared_domain`, `fenicsx_stokes_shared_domain`, `fenicsx_oseen_shared_domain`, and `fenicsx_navier_stokes_shared_domain`. `--vector-reference-source` accepts only `fenicsx`. Use the per-model CLI options `--darcy-fenicsx-reference-sample-path`, `--stokes-fenicsx-reference-sample-path`, `--oseen-fenicsx-reference-sample-path`, and `--navier-stokes-fenicsx-reference-sample-path` to import already-computed FEniCSx field artifacts, or omit them to let procurement generate artifacts under `data/<run>/fenicsx_references/{model}/fields.npz`.
 
-Limitations: generated OpenFOAM cases, meshes, logs, `.npz`, `.json`, and `.png` artifacts remain ignored under `data/` and are not committed unless explicitly requested. The vector references are external OpenFOAM laminar incompressible-flow samples reused across Stokes, Oseen, and Navier-Stokes diagnostics; they are no longer manufactured fields, but the residual diagnostics are finite-difference post-processing on the sampled grid rather than OpenFOAM's native equation residuals.
+Limitations: generated solver outputs, `.npz`, `.json`, and `.png` artifacts remain ignored under `data/` and are not committed unless explicitly requested. The previous OpenFOAM one-sample comparison run should not be treated as an apples-to-apples PDE surrogate result. FEniCSx is available through `/usr/bin/python3`; the normal conda Python used by tests may still report missing `dolfinx`, `ufl`, `petsc4py`, or `mpi4py`. Residual diagnostics are currently finite-difference post-processing on sampled grids rather than native FEniCSx variational residual exports. The Oseen reference uses the repository's existing convection velocity convention `(peak_velocity, 0.0)`. The Darcy PINN still represents velocity as `-grad(p)`, matching the generated Darcy reference velocity recovery.
+
+## FEniCSx Physics-Simulation Path
+
+Phase 27 implements real model-specific FEniCSx ground-truth generation before rerunning PINN comparisons or figures. FEniCSx is available through `/usr/bin/python3`; normal user Python may still report missing `dolfinx`, `ufl`, `petsc4py`, or `mpi4py`. The procurement path invokes the system interpreter for FEniCSx generation and then imports the resulting `.npz` files into the normal experiment process.
+
+Implemented solver path:
+
+- Darcy: CG1 pressure solve with inlet flux, pressure outlet, no-normal-flow natural walls, and velocity recovered by projecting `-grad(p)`.
+- Stokes: Taylor-Hood P2-P1 mixed finite-element solve with top-left velocity inlet, bottom-right pressure outlet, and no-slip walls.
+- Oseen: Taylor-Hood P2-P1 mixed finite-element solve with the same boundary geometry and convection velocity `(peak_velocity, 0.0)`.
+- Navier-Stokes: steady nonlinear Taylor-Hood P2-P1 mixed finite-element solve with the same velocity/pressure boundary geometry.
+- Each generated per-model artifact contains `coordinates`, `reference_pressure`, `reference_u`, and `reference_v`, then is wired through `fenicsx_reference_sample_paths`.
+- Do not reuse one model's solution as another model's ground truth. Do not use manufactured fields or OpenFOAM fallbacks for active comparison runs.
+
+Smoke reproduction:
+
+```bash
+PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-fenicsx python -m pinn_fluid.result_procurement \
+  --output-dir data/fenicsx_phase27_smoke_2026_05_11 \
+  --grid-points 5 \
+  --training-steps 4 \
+  --hidden-width 6 \
+  --hidden-layers 1 \
+  --learning-rate 0.03 \
+  --seed 27 \
+  --viscosity 0.25 \
+  --peak-velocity 1.0 \
+  --git-commit fenicsx-phase27-smoke
+PYTHONPATH=src MPLCONFIGDIR=/tmp/matplotlib-pinn-fenicsx python -m pinn_fluid.figures data/fenicsx_phase27_smoke_2026_05_11
+```
 
 ## Environment Direction
 

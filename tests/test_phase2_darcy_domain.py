@@ -70,8 +70,8 @@ def test_darcy_velocity_is_negative_pressure_gradient():
     assert torch.allclose(velocity, expected, atol=1e-10)
 
 
-def test_boundary_residuals_follow_pressure_and_no_normal_flow_conditions():
-    inlet_pressure = torch.tensor([[0.9], [1.1]], dtype=torch.float64)
+def test_boundary_residuals_follow_velocity_inlet_pressure_outlet_and_no_normal_flow():
+    inlet_gradients = torch.tensor([[0.0, 1.0], [0.2, 0.75]], dtype=torch.float64)
     outlet_pressure = torch.tensor([[0.2], [-0.1]], dtype=torch.float64)
     wall_gradients = torch.tensor(
         [[0.0, 0.5], [1.5, 0.0], [0.0, -0.25]],
@@ -83,12 +83,14 @@ def test_boundary_residuals_follow_pressure_and_no_normal_flow_conditions():
     )
 
     residuals = boundary_residuals(
-        inlet_pressure=inlet_pressure,
+        inlet_gradients=inlet_gradients,
         outlet_pressure=outlet_pressure,
         wall_gradients=wall_gradients,
         wall_normals=wall_normals,
+        inlet_velocity=(0.0, -1.0),
     )
 
-    assert torch.allclose(residuals["inlet"], torch.tensor([[-0.1], [0.1]], dtype=torch.float64))
+    expected_inlet = torch.tensor([[0.0, 0.0], [-0.2, 0.25]], dtype=torch.float64)
+    assert torch.allclose(residuals["inlet"], expected_inlet)
     assert torch.allclose(residuals["outlet"], outlet_pressure)
     assert torch.allclose(residuals["wall"], torch.zeros((3, 1), dtype=torch.float64))
