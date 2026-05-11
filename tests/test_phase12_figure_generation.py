@@ -148,7 +148,7 @@ def test_generate_figure_bundle_creates_darcy_field_and_convergence_panels(tmp_p
     assert darcy_entry["convergence_panel"] == "figures/darcy_convergence.png"
     assert darcy_entry["field_panel_layout"] == {
         "columns": ["predicted", "actual", "residual"],
-        "rows": ["pressure", "u", "v"],
+        "rows": ["u", "v", "p"],
     }
     assert darcy_entry["boundary_markers"] == {
         "inlet": {
@@ -165,19 +165,19 @@ def test_generate_figure_bundle_creates_darcy_field_and_convergence_panels(tmp_p
         },
     }
     assert darcy_entry["field_panel_tiles"] == [
-        "pressure predicted",
-        "pressure actual",
-        "pressure residual",
         "u predicted",
         "u actual",
         "u residual",
         "v predicted",
         "v actual",
         "v residual",
+        "p predicted",
+        "p actual",
+        "p residual",
     ]
-    assert darcy_entry["field_panel_color_limits"]["pressure"]["predicted_actual"] == [0.0, 1.0]
     assert darcy_entry["field_panel_color_limits"]["u"]["predicted_actual"] == [0.0, 1.0]
     assert darcy_entry["field_panel_color_limits"]["v"]["predicted_actual"] == [0.0, 1.0]
+    assert darcy_entry["field_panel_color_limits"]["p"]["predicted_actual"] == [0.0, 1.0]
     assert darcy_entry["pressure_velocity_quiver"] == "figures/darcy_pressure_velocity_quiver.png"
     _assert_png(tmp_path / darcy_entry["field_panel"])
     _assert_png(tmp_path / darcy_entry["convergence_panel"])
@@ -214,7 +214,7 @@ def test_generate_figure_bundle_creates_velocity_pressure_panels(tmp_path):
     assert stokes_entry["field_panel_title"] == "stokes field comparison"
     assert stokes_entry["field_panel_layout"] == {
         "columns": ["predicted", "actual", "residual"],
-        "rows": ["u", "v", "pressure"],
+        "rows": ["u", "v", "p"],
     }
     assert stokes_entry["field_panel_tiles"] == [
         "u predicted",
@@ -223,11 +223,11 @@ def test_generate_figure_bundle_creates_velocity_pressure_panels(tmp_path):
         "v predicted",
         "v actual",
         "v residual",
-        "pressure predicted",
-        "pressure actual",
-        "pressure residual",
+        "p predicted",
+        "p actual",
+        "p residual",
     ]
-    assert stokes_entry["field_panel_color_limits"]["pressure"]["predicted_actual"] == [0.0, 2.0]
+    assert stokes_entry["field_panel_color_limits"]["p"]["predicted_actual"] == [0.0, 2.0]
     assert stokes_entry["pressure_velocity_quiver"] == "figures/stokes_pressure_velocity_quiver.png"
     assert stokes_entry["convergence_panel_title"] == "stokes convergence"
     assert stokes_entry["convergence_legend"] == [
@@ -244,6 +244,59 @@ def test_generate_figure_bundle_creates_velocity_pressure_panels(tmp_path):
     _assert_png(tmp_path / stokes_entry["field_panel"])
     _assert_png(tmp_path / stokes_entry["convergence_panel"])
     _assert_png(tmp_path / stokes_entry["pressure_velocity_quiver"])
+
+
+def test_generate_figure_bundle_uses_consistent_row_order_and_p_handle(tmp_path):
+    grid_points = 3
+    coordinates = _coordinates(grid_points)
+    base = np.linspace(0.0, 1.0, grid_points * grid_points).reshape(-1, 1)
+
+    darcy_dir = tmp_path / "darcy"
+    darcy_dir.mkdir()
+    np.savez(
+        darcy_dir / "fields.npz",
+        coordinates=coordinates,
+        predicted_pressure=base,
+        reference_pressure=base * 0.5,
+        predicted_velocity=np.column_stack((base.reshape(-1), 1.0 - base.reshape(-1))),
+        reference_velocity=np.column_stack((base.reshape(-1) * 0.5, 0.5 - base.reshape(-1) * 0.25)),
+        residual=np.full_like(base, 0.05),
+    )
+    _write_history(darcy_dir / "history.json", boundary_name="wall")
+
+    stokes_dir = tmp_path / "stokes"
+    stokes_dir.mkdir()
+    np.savez(
+        stokes_dir / "fields.npz",
+        coordinates=coordinates,
+        predicted_u=base,
+        predicted_v=base * 0.25,
+        predicted_pressure=base * 2.0,
+        reference_u=base * 0.9,
+        reference_v=base * 0.1,
+        reference_pressure=base * 1.5,
+        residual=np.full_like(base, 0.05),
+    )
+    _write_history(stokes_dir / "history.json")
+
+    manifest = generate_figure_bundle(tmp_path, models=("darcy", "stokes"))
+
+    for entry in manifest["models"]:
+        assert entry["field_panel_layout"]["rows"] == ["u", "v", "p"]
+        assert entry["field_panel_tiles"] == [
+            "u predicted",
+            "u actual",
+            "u residual",
+            "v predicted",
+            "v actual",
+            "v residual",
+            "p predicted",
+            "p actual",
+            "p residual",
+        ]
+        assert set(entry["field_panel_color_limits"]) == {"u", "v", "p"}
+        assert "pressure" not in json.dumps(entry["field_panel_layout"]).lower()
+        assert "pressure" not in json.dumps(entry["field_panel_tiles"]).lower()
 
 
 def test_generate_figure_bundle_creates_separate_predicted_actual_and_residual_images(tmp_path):

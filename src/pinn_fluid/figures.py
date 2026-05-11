@@ -245,15 +245,15 @@ def _darcy_panels(fields: np.lib.npyio.NpzFile) -> list[tuple[str, np.ndarray]]:
     reference_u = _darcy_component(fields, "reference_u", reference_velocity, 0)
     reference_v = _darcy_component(fields, "reference_v", reference_velocity, 1)
     return [
-        ("pressure predicted", predicted_pressure),
-        ("pressure actual", reference_pressure),
-        ("pressure residual", np.abs(predicted_pressure - reference_pressure)),
         ("u predicted", predicted_u),
         ("u actual", reference_u),
         ("u residual", np.abs(predicted_u - reference_u)),
         ("v predicted", predicted_v),
         ("v actual", reference_v),
         ("v residual", np.abs(predicted_v - reference_v)),
+        ("p predicted", predicted_pressure),
+        ("p actual", reference_pressure),
+        ("p residual", np.abs(predicted_pressure - reference_pressure)),
     ]
 
 
@@ -282,9 +282,9 @@ def _velocity_pressure_panels(fields: np.lib.npyio.NpzFile) -> list[tuple[str, n
         ("v predicted", predicted_v),
         ("v actual", reference_v),
         ("v residual", np.abs(predicted_v - reference_v)),
-        ("pressure predicted", predicted_p),
-        ("pressure actual", reference_p),
-        ("pressure residual", np.abs(predicted_p - reference_p)),
+        ("p predicted", predicted_p),
+        ("p actual", reference_p),
+        ("p residual", np.abs(predicted_p - reference_p)),
     ]
 
 
@@ -381,9 +381,7 @@ def _model_field_panels(model: str, fields: np.lib.npyio.NpzFile) -> tuple[list[
 
 
 def _model_field_layout(model: str) -> dict[str, list[str]]:
-    if model == "darcy":
-        return {"columns": list(COMPARISON_COLUMNS), "rows": ["pressure", "u", "v"]}
-    return {"columns": list(COMPARISON_COLUMNS), "rows": ["u", "v", "pressure"]}
+    return {"columns": list(COMPARISON_COLUMNS), "rows": ["u", "v", "p"]}
 
 
 def _model_separate_images(model: str, fields: np.lib.npyio.NpzFile) -> dict[str, tuple[str, np.ndarray]]:
