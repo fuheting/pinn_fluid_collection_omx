@@ -161,21 +161,23 @@ def _save_field_panel(
         colorbar.set_ticks(ticks)
         colorbar.set_ticklabels(_colorbar_tick_labels(values, limits))
         colorbar.set_label(SCALAR_LEGEND, fontsize=8, labelpad=10)
-    for row, label in enumerate(row_labels):
-        axes_array[row, 0].set_ylabel(
-            label,
-            rotation=0,
-            labelpad=38,
-            va="center",
-            fontsize=12,
-            fontweight="bold",
-        )
     for column, label in enumerate(column_labels):
         axes_array[-1, column].set_xlabel(label, fontsize=12, fontweight="bold", labelpad=10)
     for axis in flat_axes[len(panels) :]:
         axis.axis("off")
     fig.suptitle(title)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0.065 if row_labels else 0.0, 0.0, 1.0, 0.965))
+    for row, label in enumerate(row_labels):
+        position = axes_array[row, 0].get_position()
+        fig.text(
+            0.025,
+            position.y0 + 0.5 * position.height,
+            label,
+            ha="center",
+            va="center",
+            fontsize=12,
+            fontweight="bold",
+        )
     fig.savefig(path, dpi=140)
     plt.close(fig)
 

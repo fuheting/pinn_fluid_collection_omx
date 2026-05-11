@@ -51,6 +51,10 @@ def _has_dark_pixels(image, *, y_slice, x_slice) -> bool:
     return bool(np.any(np.all(region < 80, axis=2)))
 
 
+def _has_dark_pixels_in_each_band(image, *, y_bands, x_slice) -> bool:
+    return all(_has_dark_pixels(image, y_slice=band, x_slice=x_slice) for band in y_bands)
+
+
 def _has_color_pixels(image, *, y_slice, x_slice, color) -> bool:
     region = image[y_slice, x_slice]
     target = np.array(color, dtype=np.int16)
@@ -244,6 +248,39 @@ def test_generate_figure_bundle_creates_velocity_pressure_panels(tmp_path):
     _assert_png(tmp_path / stokes_entry["field_panel"])
     _assert_png(tmp_path / stokes_entry["convergence_panel"])
     _assert_png(tmp_path / stokes_entry["pressure_velocity_quiver"])
+
+
+def test_field_panel_row_labels_are_visible_in_left_margin(tmp_path):
+    model_dir = tmp_path / "darcy"
+    model_dir.mkdir()
+    grid_points = 3
+    coordinates = _coordinates(grid_points)
+    base = np.linspace(0.0, 1.0, grid_points * grid_points).reshape(-1, 1)
+    np.savez(
+        model_dir / "fields.npz",
+        coordinates=coordinates,
+        predicted_pressure=base,
+        reference_pressure=base * 0.5,
+        predicted_velocity=np.column_stack((base.reshape(-1), 1.0 - base.reshape(-1))),
+        reference_velocity=np.column_stack((base.reshape(-1) * 0.5, 0.5 - base.reshape(-1) * 0.25)),
+        residual=np.full_like(base, 0.05),
+    )
+    _write_history(model_dir / "history.json", boundary_name="wall")
+
+    manifest = generate_figure_bundle(tmp_path)
+
+    image = _read_rgb_png(tmp_path / manifest["models"][0]["field_panel"])
+    height, width, _ = image.shape
+    assert width >= 1200
+    assert _has_dark_pixels_in_each_band(
+        image,
+        y_bands=(
+            slice(int(height * 0.18), int(height * 0.28)),
+            slice(int(height * 0.47), int(height * 0.57)),
+            slice(int(height * 0.75), int(height * 0.85)),
+        ),
+        x_slice=slice(18, 42),
+    )
 
 
 def test_generate_figure_bundle_uses_consistent_row_order_and_p_handle(tmp_path):
